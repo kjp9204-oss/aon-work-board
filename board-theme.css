@@ -1,0 +1,78 @@
+/* Palette and official wordmark follow the reference Today's Center and Blog screens. */
+.board-home {
+  --paper: #f5f1eb;
+  --white: #fffdfa;
+  --ink: #241f1b;
+  --body: #493930;
+  --muted: #6f6056;
+  --line: #e7dcd0;
+  --green: #bf2d24;
+  --pale: #fdf0e8;
+  --rust: #bf2d24;
+  --shadow: 0 7px 22px #503a2610;
+  background: var(--paper);
+}
+.board-home .sidebar, .board-home .topbar { background: #fdfaf6; }
+.board-home .aon-brand img, .blog-sample .aon-brand img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+.board-home .aon-brand img { width: 135px; }
+.board-home .brand-description { color: var(--muted); border-color: var(--line); }
+.board-home .board-nav { display: grid; gap: 15px; margin-top: 14px; }
+.board-home .board-nav section { display: grid; gap: 3px; min-width: 0; }
+.board-home .board-nav h2 { margin: 0 9px 3px; font-size: 11px; text-transform: none; color: var(--muted); }
+.board-home .board-nav .nav-item { color: var(--body); line-height: 1.35; }
+.board-home .board-nav .nav-item.active { color: var(--green); background: var(--pale); border-color: #f1cebb; }
+.board-home .board-nav .nav-item:hover { background: var(--pale); }
+.board-home .intake-pending { opacity: .8; }
+.board-home .intake-pending small { font-size: 10px; }
+.board-home .topbar-actions { flex-wrap: wrap; }
+.board-home .board-hero {
+  background: #efe2cc;
+  background: linear-gradient(110deg, #efe2cc 58%, #f4e9d4 100%);
+  border: 1px solid #e9d7bd;
+  border-radius: 17px;
+  padding: clamp(18px, 4vw, 34px);
+  min-height: 146px;
+}
+.board-home .page-heading h1 { color: var(--ink); font-size: clamp(26px, 4vw, 40px); }
+.board-home .page-heading .eyebrow { color: #87432c; }
+.board-home .page-heading p, .board-home .demo-strip { color: var(--muted); }
+.board-home .primary-button, .board-home .primary-button:hover { background: #bf2d24; color: #fff; }
+.board-home .primary-button:hover { background: #a92820; }
+.board-home .panel, .board-home .metric { background: var(--white); border-color: var(--line); }
+.board-home .metric p, .board-home .panel-title p { color: var(--muted); }
+.board-home th, .board-home .schedule-foot, .board-home .filter-row select { background: #f9f4ed; }
+.board-home #connectionError { margin-bottom: 14px; }
+.board-home #googleSignIn { max-width: 100%; }
+.board-home #logout { background: transparent; border: 0; color: var(--green); }
+.board-home .center-extra > p { margin: 0; padding: 0 18px 16px; color: var(--muted); }
+.board-home #announcements, .board-home #ai-dashboard { scroll-margin-top: 14px; }
+.board-home .ai-panel { margin-top: 18px; }
+.board-home .ai-panel-body { padding: 0 20px 20px; }
+.board-home .ai-panel-body h3 { margin: 0 0 3px; font-size: 18px; }
+.board-home .ai-sample-title { margin: 0 0 10px; color: var(--muted); }
+.board-home .ai-panel-body ol { margin: 0 0 15px; padding: 0; list-style: none; }
+.board-home .ai-panel-body li { border-top: 1px solid var(--line); }
+.board-home .ai-panel-body summary { padding: 10px 0; cursor: pointer; font-weight: 700; }
+.board-home .ai-panel-body details p { margin: 0 0 10px 15px; color: var(--muted); }
+.board-home [hidden], .blog-sample [hidden] { display: none !important; }
+.blog-sample { --ink: #241f1b; --muted: #6f6056; --line: #e7dcd0; --bg: #f5f1eb; --green: #bf2d24; --light: #fdf0e8; }
+.blog-sample .top { background: #fffdfa; }
+.blog-sample .aon-brand img { width: clamp(115px, 16vw, 152px); }
+@media (max-width: 760px) {
+  .board-home .sidebar { padding-bottom: 11px; }
+  .board-home .aon-brand img { width: 115px; }
+  .board-home .board-nav section { display: flex; align-items: center; flex-wrap: wrap; }
+  .board-home .board-nav { gap: 4px; margin-top: 7px; }
+  .board-home .board-nav h2 { margin: 0 5px 0 0; }
+  .board-home .board-nav .nav-item { min-height: 32px; flex: 0 1 auto; padding: 5px 7px; }
+  .board-home .board-hero { align-items: flex-start; gap: 10px; }
+}
+@media (max-width: 450px) {
+  .board-home .board-hero { flex-direction: column; }
+  .board-home .topbar-actions { justify-content: flex-start; }
+  .blog-sample .aon-brand img { width: 103px; }
+}
