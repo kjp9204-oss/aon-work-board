@@ -3,5 +3,5 @@
 window.AON_CONFIG = Object.freeze({
   googleClientId: '',
   appsScriptUrl: '',
-  intakeUrl: '',
+  intakeUrl: 'https://script.google.com/macros/s/AKfycbxCIjm16hBOHwE-L6c99f2HRg4r23U9rrwtkE2Q7nzvz-z5rEAwu-491rNCpykuzhqEeQ/exec',
 });
