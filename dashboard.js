@@ -196,7 +196,9 @@
   }
   function expireSession() {
     if ((!credential && !guest) || Date.now() < expiresAt) return false;
+    forgetLogin(false);
     showConnectionError(requestError(401, 'Google 로그인 시간이 만료되었습니다.'));
+    if (googleId && wantsAutoSignIn()) googleId.prompt?.();
     return true;
   }
   async function refresh({ silent = false } = {}) {
@@ -220,6 +222,22 @@
       return Number.isSafeInteger(exp) ? exp * 1000 : 0;
     } catch { return 0; }
   }
+  // Keep the short-lived Google sign-in on this device so a page refresh does not log the user out.
+  // The server still checks the token on every request; it expires on its own within about an hour,
+  // after which Google signs the user back in silently (auto_select) unless they logged out.
+  const SAVED_LOGIN = 'aon-board-login';
+  const LOGGED_OUT = 'aon-board-logged-out';
+  function saveLogin(token, exp) { try { localStorage.setItem(SAVED_LOGIN, JSON.stringify({ token, exp })); localStorage.removeItem(LOGGED_OUT); } catch {} }
+  function forgetLogin(loggedOut) { try { localStorage.removeItem(SAVED_LOGIN); if (loggedOut) localStorage.setItem(LOGGED_OUT, '1'); } catch {} }
+  function savedLogin() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVED_LOGIN) || 'null');
+      if (saved && typeof saved.token === 'string' && saved.exp > Date.now() + 60000) return saved.token;
+    } catch {}
+    forgetLogin(false);
+    return '';
+  }
+  const wantsAutoSignIn = () => { try { return !localStorage.getItem(LOGGED_OUT); } catch { return true; } };
   async function onGoogleCredential(response) {
     const token = response.credential;
     if (loading || saving || user || guest || typeof token !== 'string' || token.length > 10000) return;
@@ -233,6 +251,7 @@
       const exp = credentialExpiry(token);
       if (exp <= Date.now() || exp > Date.now() + 24 * 60 * 60 * 1000) throw requestError(401, 'Google 로그인 시간이 만료되었습니다.');
       if (session.access === 'guest') {
+        saveLogin(token, exp);
         enterGuest(exp);
         return;
       }
@@ -251,6 +270,7 @@
       authVersion += 1;
       expiresAt = exp;
       expiryTimer = setTimeout(expireSession, exp - Date.now());
+      saveLogin(token, exp);
       $('accountName').textContent = user.displayName || 'Google 연결됨';
       displayBoard(board);
       if (isDialogOpen()) {
@@ -258,6 +278,7 @@
         toast('로그인을 확인했습니다. 작성한 내용을 저장할 수 있습니다.');
       }
     } catch (error) {
+      if (authError(error) || error.status === 401) forgetLogin(false);
       if (isDialogOpen()) $($('taskDialog').open ? 'formError' : 'eventFormError').textContent = errorText(error);
       showConnectionError(error);
     } finally { loading = false; updateControls(); }
@@ -297,6 +318,8 @@
     }
     setStatus('Google 로그인 필요');
     $('accountName').textContent = 'Google 로그인 필요';
+    const saved = savedLogin();
+    if (saved) onGoogleCredential({ credential: saved });
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
@@ -304,14 +327,16 @@
     script.onload = () => {
       googleId = window.google?.accounts?.id;
       if (!googleId) return script.onerror();
-      googleId.initialize({ client_id: config.googleClientId.trim(), callback: onGoogleCredential, auto_select: false });
+      googleId.initialize({ client_id: config.googleClientId.trim(), callback: onGoogleCredential, auto_select: wantsAutoSignIn(), cancel_on_tap_outside: false });
       mountGoogleButton($('googleSignIn'));
+      if (!saved && wantsAutoSignIn()) googleId.prompt?.();
     };
     document.head.append(script);
   }
   function logout() {
     if (saving || loading) return;
     googleId?.disableAutoSelect();
+    forgetLogin(true);
     discardDraft();
     clearSession();
     clearConnectionError();
