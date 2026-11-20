@@ -121,7 +121,7 @@ function fixture() {
 
 test("bound setup initializes exact headers and preserves named records on another run", () => {
   const { context, call, tabs, props } = fixture();
-  assert.deepEqual([...tabs.keys()], ["업무", "일정", "예약 요약", "허용 계정", "변경 기록"]);
+  assert.deepEqual([...tabs.keys()], ["업무", "일정", "예약 요약", "공지", "허용 계정", "변경 기록"]);
   assert.equal(props.get("AON_SHEET_ID"), fakeSheetId);
   assert.deepEqual(tabs.get("업무").rows[0], ["id", "title", "category", "owner", "due", "status", "next", "revision", "updatedAt", "updatedBy"]);
   assert.deepEqual(tabs.get("일정").rows[0], ["id", "title", "owner", "date", "time", "revision", "updatedAt", "updatedBy"]);
@@ -237,4 +237,19 @@ test("weekly POS summary saves counts only, updates by revision, and creates its
   assert.equal(listed.length, 1);
   assert.equal(listed[0].total, "24");
   assert.equal(call("listTasks").ok, true);
+});
+
+test("notices save, take down by status, and auto-create their tab", () => {
+  const { call, tabs } = fixture();
+  tabs.delete("공지");
+  const noticeId = "9d1c2b3a-4e5f-4a6b-8c7d-0e1f2a3b4c5d";
+  const notice = { id: noticeId, title: "다음 주 운영 회의", body: "월요일 10시\n안쪽 공간", owner: "재필님", date: "2026-11-20", status: "게시" };
+  assert.deepEqual(call("listNotices").notices, []);
+  for (const invalid of [{ status: "삭제" }, { title: "" }, { body: "X".repeat(1001) }, { date: "2026-02-30" }]) {
+    assert.equal(call("createNotice", { ...notice, ...invalid }).status, 400);
+  }
+  assert.equal(call("createNotice", notice).notice.revision, 1);
+  assert.equal(call("updateNotice", { id: noticeId, revision: 1, status: "내림" }).notice.status, "내림");
+  assert.equal(call("listNotices").notices.length, 1);
+  assert.equal(call("deleteNotice", { id: noticeId }).error.code, "UNKNOWN_ACTION");
 });

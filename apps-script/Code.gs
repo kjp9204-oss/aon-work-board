@@ -14,8 +14,15 @@ const BOARD_DATA_SCHEMA = Object.freeze({
     tab: "예약 요약",
     fields: ["id", "weekStart", "period", "total", "byDay", "byTime", "note", "checkedAt"],
     headers: ["id", "weekStart", "period", "total", "byDay", "byTime", "note", "checkedAt", "revision", "updatedAt", "updatedBy"]
+  },
+  // Team notices for center operations only. Taken-down notices stay in the sheet with status 내림.
+  notice: {
+    tab: "공지",
+    fields: ["id", "title", "body", "owner", "date", "status"],
+    headers: ["id", "title", "body", "owner", "date", "status", "revision", "updatedAt", "updatedBy"]
   }
 });
+const NOTICE_STATUSES = ["게시", "내림"];
 const ALLOWED_EMAILS_TAB = "허용 계정";
 const AUDIT_TAB = "변경 기록";
 const AUDIT_HEADERS = ["at", "actor", "entity", "recordId", "action", "revision", "requestHash"];
@@ -30,9 +37,14 @@ const DATA_ACTIONS = Object.freeze({
   updateEvent: ["event", "update"],
   listPos: ["pos", "list"],
   createPos: ["pos", "create"],
-  updatePos: ["pos", "update"]
+  updatePos: ["pos", "update"],
+  listNotices: ["notice", "list"],
+  createNotice: ["notice", "create"],
+  updateNotice: ["notice", "update"]
 });
-const LIST_KEYS = Object.freeze({ task: "tasks", event: "events", pos: "posSummaries" });
+const LIST_KEYS = Object.freeze({ task: "tasks", event: "events", pos: "posSummaries", notice: "notices" });
+// Tabs added after the first deployment are created on first use.
+const LATE_TABS = ["pos", "notice"];
 
 class BoardError_ extends Error {
   constructor(status, code, message) {
@@ -124,13 +136,14 @@ function routeBoardRequest_(spreadsheet, actor, request) {
   }
   const [kind, action] = DATA_ACTIONS[request.action];
   const schema = BOARD_DATA_SCHEMA[kind];
-  const sheet = kind === "pos" ? ensurePosTab_(spreadsheet) : ensureTab_(spreadsheet, schema.tab, schema.headers);
+  const sheet = LATE_TABS.includes(kind) ? ensureLateTab_(spreadsheet, kind) : ensureTab_(spreadsheet, schema.tab, schema.headers);
   const audit = ensureTab_(spreadsheet, AUDIT_TAB, AUDIT_HEADERS);
   if (action === "list") {
     const creators = creationIndex_(audit, kind);
     const records = boardRows_(sheet, schema.headers).map(entry => withCreator_(entry.record, creators));
     records.sort(kind === "task" ? (a, b) => b.updatedAt.localeCompare(a.updatedAt) :
       kind === "pos" ? (a, b) => b.weekStart.localeCompare(a.weekStart) || b.updatedAt.localeCompare(a.updatedAt) :
+      kind === "notice" ? (a, b) => b.date.localeCompare(a.date) || b.updatedAt.localeCompare(a.updatedAt) :
       (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
     return { ok: true, storage: "sheet", [LIST_KEYS[kind]]: records };
   }
@@ -145,10 +158,10 @@ function routeBoardRequest_(spreadsheet, actor, request) {
   }
 }
 
-// The reservation tab was added after the first deployment, so create it on first use
-// with exact headers instead of failing every board read until setup is re-run.
-function ensurePosTab_(spreadsheet) {
-  const schema = BOARD_DATA_SCHEMA.pos;
+// The reservation and notice tabs were added after the first deployment, so create them on
+// first use with exact headers instead of failing every board read until setup is re-run.
+function ensureLateTab_(spreadsheet, kind) {
+  const schema = BOARD_DATA_SCHEMA[kind];
   const existing = spreadsheet.getSheetByName(schema.tab);
   if (existing && existing.getLastRow() > 0) return ensureTab_(spreadsheet, schema.tab, schema.headers);
   const sheet = existing || spreadsheet.insertSheet(schema.tab);
@@ -224,6 +237,15 @@ function validateBoardFields_(kind, input) {
   const id = input.id;
   if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
     return invalidInput_("업무 또는 일정 ID를 확인해 주세요.");
+  }
+  if (kind === "notice") {
+    if (!NOTICE_STATUSES.includes(input.status)) return invalidInput_("공지 상태를 확인해 주세요.");
+    return {
+      id: id.toLowerCase(), title: textValue_(input.title, 1, 100, "공지 제목", false),
+      body: textValue_(input.body ?? "", 0, 1000, "공지 내용", true),
+      owner: textValue_(input.owner, 1, 40, "작성자", false),
+      date: dateValue_(input.date, false, "공지 날짜"), status: input.status
+    };
   }
   if (kind === "pos") {
     return {
@@ -342,6 +364,7 @@ function prepareAonSpreadsheet() {
     [BOARD_DATA_SCHEMA.task.tab, BOARD_DATA_SCHEMA.task.headers],
     [BOARD_DATA_SCHEMA.event.tab, BOARD_DATA_SCHEMA.event.headers],
     [BOARD_DATA_SCHEMA.pos.tab, BOARD_DATA_SCHEMA.pos.headers],
+    [BOARD_DATA_SCHEMA.notice.tab, BOARD_DATA_SCHEMA.notice.headers],
     [ALLOWED_EMAILS_TAB, ["email"]],
     [AUDIT_TAB, AUDIT_HEADERS]
   ];

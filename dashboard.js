@@ -13,11 +13,11 @@
   let credential = '', expiresAt = 0, expiryTimer, authVersion = 0, googleId;
   const STATUSES = ['접수', '진행 중', '확인 대기', '보류', '완료'];
   const CATEGORIES = ['운영·시설', '직원·교육', '회의·행사', '블로그·홍보'];
-  let tasks = [], events = [], user = null, posSummaries = [], posState = 'idle', posEdit = null;
+  let tasks = [], events = [], user = null, posSummaries = [], posState = 'idle', posEdit = null, notices = [], noticeState = 'idle', noticeEdit = null;
   let loaded = false, loading = false, saving = false, page = 'overview', quickFilter = '', mine = false;
   let taskEdit = null, eventEdit = null, toastTimer;
   const node = (tag, className, text) => { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; };
-  const isDialogOpen = () => $('taskDialog').open || $('eventDialog').open || $('posDialog').open;
+  const isDialogOpen = () => $('taskDialog').open || $('eventDialog').open || $('posDialog').open || $('noticeDialog').open;
   function todayISO() {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
     const part = type => parts.find(p => p.type === type).value;
@@ -47,9 +47,9 @@
     }
     taskEdit = null;
     eventEdit = null;
-    if ($('posDialog').open) $('posDialog').close();
-    $('posForm').reset();
+    for (const kind of ['pos', 'notice']) { if ($(kind + 'Dialog').open) $(kind + 'Dialog').close(); $(kind + 'Form').reset(); }
     posEdit = null;
+    noticeEdit = null;
   }
   function clearSession() {
     authVersion += 1;
@@ -61,6 +61,8 @@
     events = [];
     posSummaries = [];
     posState = 'idle';
+    notices = [];
+    noticeState = 'idle';
     loaded = false;
     resetFilters();
     $('accountName').textContent = 'Google 로그인 필요';
@@ -97,10 +99,12 @@
     $('saveEvent').disabled = disabled;
     $('addPos').disabled = disabled || posState !== 'ready';
     $('savePos').disabled = disabled;
+    $('addNotice').disabled = disabled || noticeState !== 'ready';
+    $('saveNotice').disabled = disabled;
     $('logout').hidden = !user;
     $('logout').disabled = loading || saving;
     $('googleSignIn').hidden = Boolean(user);
-    document.querySelectorAll('#taskForm input, #taskForm select, #taskForm textarea, #eventForm input, #posForm input, #posForm textarea').forEach(input => { input.disabled = saving; });
+    document.querySelectorAll('#taskForm input, #taskForm select, #taskForm textarea, #eventForm input, #posForm input, #posForm textarea, #noticeForm input, #noticeForm textarea, #noticeForm select').forEach(input => { input.disabled = saving; });
     for (const id of ['closeDialog', 'cancelDialog', 'closeEventDialog', 'cancelEventDialog', 'reloadTask', 'reloadEvent', 'taskResumeSession', 'eventResumeSession']) $(id).disabled = saving || loading;
   }
   async function api(action, data = {}, token = credential) {
@@ -133,25 +137,27 @@
   }
   // The reservation summary is optional: an older Apps Script deployment without it
   // must not stop tasks and events from loading.
-  async function readPos(token) {
+  async function readOptional(action, key, token) {
     try {
-      const data = await api('listPos', {}, token);
-      return { list: Array.isArray(data.posSummaries) ? data.posSummaries : [], state: 'ready' };
+      const data = await api(action, {}, token);
+      return { list: Array.isArray(data[key]) ? data[key] : [], state: 'ready' };
     } catch (error) {
       if (authError(error)) throw error;
       return { list: [], state: error.code === 'UNKNOWN_ACTION' ? 'not-deployed' : 'error' };
     }
   }
   async function readBoard(token = credential) {
-    const [taskData, eventData, pos] = await Promise.all([api('listTasks', {}, token), api('listEvents', {}, token), readPos(token)]);
+    const [taskData, eventData, pos, notice] = await Promise.all([api('listTasks', {}, token), api('listEvents', {}, token), readOptional('listPos', 'posSummaries', token), readOptional('listNotices', 'notices', token)]);
     if (!Array.isArray(taskData.tasks) || !Array.isArray(eventData.events)) throw new Error('업무·일정 응답을 확인하지 못했습니다.');
-    return { tasks: taskData.tasks, events: eventData.events, pos };
+    return { tasks: taskData.tasks, events: eventData.events, pos, notice };
   }
   function displayBoard(board) {
     tasks = board.tasks;
     events = board.events;
     posSummaries = board.pos.list;
     posState = board.pos.state;
+    notices = board.notice.list;
+    noticeState = board.notice.state;
     loaded = true;
     clearConnectionError();
     setStatus('시트 저장');
@@ -325,14 +331,65 @@
     $('filterDescription').textContent = ({ today: '오늘 마감 · 미완료', overdue: '마감 지난 업무', waiting: '확인 대기' })[quickFilter] || (mine ? '내가 등록한 업무' : '전체 업무');
     const doneCount = tasks.filter(t => t.status === '완료').length;
     if (loaded && doneCount && status !== '완료') $('filterDescription').textContent += ` · 완료 ${doneCount}건 숨김`;
-    $('overviewLayout').hidden = page === 'calendar'; $('calendarView').hidden = page !== 'calendar';
+    $('overviewLayout').hidden = page === 'calendar' || page === 'ai'; $('calendarView').hidden = page !== 'calendar'; $('ai-dashboard').hidden = page !== 'ai';
     $('overviewLayout').classList.toggle('tasks-only', page === 'tasks');
     document.querySelectorAll('[data-page]').forEach(button => { const selected = button.dataset.page === page; button.classList.toggle('active', selected); if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
-    const title = ({ overview: '오늘의 센터', tasks: '업무', calendar: '센터 일정' })[page];
+    const title = ({ overview: '오늘의 센터', tasks: '업무', calendar: '센터 일정', ai: 'AI 대시보드' })[page];
     $('pageTitle').textContent = title; $('breadcrumbCurrent').textContent = title;
-    $('pageDescription').textContent = ({ overview: '오늘 할 일과 센터 일정, 다음 행동을 확인하세요.', tasks: '담당자와 마감, 다음 행동을 한곳에서 확인하세요.', calendar: '회의와 교육 일정을 미리 확인하고 준비하세요.' })[page];
+    $('pageDescription').textContent = ({ overview: '오늘 할 일과 센터 일정, 다음 행동을 확인하세요.', tasks: '담당자와 마감, 다음 행동을 한곳에서 확인하세요.', calendar: '회의와 교육 일정을 미리 확인하고 준비하세요.', ai: 'Claude·ChatGPT·Codex 사이의 작업 흐름입니다.' })[page];
     renderEvents(today, dates);
     renderPos(dates[0]);
+    renderNotices();
+  }
+  function renderNotices() {
+    const list = $('noticeList');
+    list.replaceChildren();
+    if (!loaded) { list.append(node('p', '', 'Google 로그인 후 공지가 표시됩니다.')); return; }
+    if (noticeState === 'not-deployed') { list.append(node('p', 'pos-warn', '시트 웹앱이 아직 공지를 받지 못합니다. Apps Script 코드를 갱신하면 쓸 수 있습니다.')); return; }
+    if (noticeState === 'error') { list.append(node('p', 'pos-warn', '공지를 불러오지 못했습니다. 새로고침해 주세요.')); return; }
+    const shown = notices.filter(item => item.status === '게시').slice(0, 5);
+    if (!shown.length) { list.append(node('p', '', '게시된 공지가 없습니다. ‘공지 작성’으로 추가하세요.')); return; }
+    for (const item of shown) {
+      const button = node('button', 'notice-item'); button.type = 'button';
+      button.append(node('b', '', item.title));
+      if (item.body) button.append(node('span', '', item.body));
+      button.append(node('small', '', `${item.date.replaceAll('-', '. ')} · ${item.owner}`));
+      button.addEventListener('click', () => openNotice(item.id));
+      list.append(button);
+    }
+  }
+  function openNotice(id) {
+    if (!user || !loaded || loading || saving || noticeState !== 'ready') return;
+    const found = id ? notices.find(item => item.id === id) : null;
+    noticeEdit = { principal: user.id, id: found?.id || crypto.randomUUID(), revision: found?.revision, isNew: !found };
+    $('noticeDialogTitle').textContent = found ? '공지 수정' : '공지 작성';
+    $('noticeTitle').value = found?.title || ''; $('noticeBody').value = found?.body || '';
+    $('noticeOwner').value = found?.owner || (user.displayName || '').slice(0, 40);
+    $('noticeDate').value = found?.date || todayISO(); $('noticeStatus').value = found?.status || '게시';
+    $('noticeFormError').textContent = '';
+    if (!$('noticeDialog').open) $('noticeDialog').showModal(); $('noticeTitle').focus();
+  }
+  async function persistNotice() {
+    if (expireSession() || saving || !user || !loaded || !noticeEdit) return;
+    const version = authVersion;
+    const input = { title: $('noticeTitle').value.trim(), body: $('noticeBody').value.trim(), owner: $('noticeOwner').value.trim(), date: $('noticeDate').value, status: $('noticeStatus').value };
+    if (!input.title || !input.owner || !input.date) { $('noticeFormError').textContent = '제목, 작성자, 날짜를 입력해 주세요.'; return; }
+    saving = true; updateControls(); setStatus('시트에 저장 중');
+    try {
+      const data = noticeEdit.isNew ? { id: noticeEdit.id, ...input } : { id: noticeEdit.id, ...input, revision: noticeEdit.revision };
+      const result = await api(noticeEdit.isNew ? 'createNotice' : 'updateNotice', data);
+      if (version !== authVersion || expireSession()) return;
+      const item = result.notice;
+      if (!item || item.id !== noticeEdit.id) throw new Error('저장 결과를 확인하지 못했습니다. 입력 내용을 유지합니다.');
+      notices = [item, ...notices.filter(entry => entry.id !== item.id)].sort((a, b) => b.date.localeCompare(a.date));
+      $('noticeDialog').close(); render();
+      setStatus('시트 저장'); toast(item.status === '내림' ? '공지를 목록에서 내렸습니다.' : '공지를 시트에 저장했습니다.');
+    } catch (error) {
+      if (version !== authVersion) return;
+      $('noticeFormError').textContent = error.status === 409 ? '다른 곳에서 먼저 수정했습니다. 창을 닫고 새로고침한 뒤 다시 입력해 주세요.' : errorText(error);
+      setStatus('저장 확인 실패 · 입력 유지', 'error');
+      if (authError(error)) showConnectionError(error);
+    } finally { saving = false; updateControls(); }
   }
   function kstStamp(date) {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
@@ -497,6 +554,10 @@
   $('clearFilters').addEventListener('click', () => { resetFilters(); render(); });
   $('addTask').addEventListener('click', () => openTask()); $('addEvent').addEventListener('click', () => openEvent());
   $('addPos').addEventListener('click', openPos);
+  $('addNotice').addEventListener('click', () => openNotice());
+  for (const id of ['closeNoticeDialog', 'cancelNoticeDialog']) $(id).addEventListener('click', () => { if (!saving) $('noticeDialog').close(); });
+  $('noticeDialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+  $('noticeForm').addEventListener('submit', event => { event.preventDefault(); persistNotice(); });
   for (const id of ['closePosDialog', 'cancelPosDialog']) $(id).addEventListener('click', () => { if (!saving) $('posDialog').close(); });
   $('posDialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
   $('posForm').addEventListener('submit', event => { event.preventDefault(); persistPos(); });
@@ -525,5 +586,6 @@
   document.addEventListener('visibilitychange', refreshVisible);
   setInterval(refreshVisible, 60000);
   window.addEventListener('beforeunload', event => { if (saving || isDialogOpen()) { event.preventDefault(); event.returnValue = ''; } });
+  if (location.hash === '#ai-dashboard') page = 'ai';
   render(); updateControls(); initializeLogin();
 })();
