@@ -1,0 +1,74 @@
+/* Phone layout: one column, readable 16px text, a single swipeable menu row that stays on top. */
+html { -webkit-text-size-adjust: 100%; }
+@media (max-width: 760px) {
+  .board-home .sidebar { position: sticky; top: 0; z-index: 20; padding: 10px 14px 8px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 2px 10px #503a2612; }
+  .board-home .aon-brand img { width: 96px; }
+  .board-home .brand-description { display: none; }
+  .board-home .board-nav { display: flex; flex-wrap: nowrap; gap: 6px; margin: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; scroll-snap-type: x proximity; }
+  .board-home .board-nav::-webkit-scrollbar { display: none; }
+  .board-home .board-nav section { display: flex; flex-wrap: nowrap; gap: 6px; flex: 0 0 auto; }
+  .board-home .board-nav h2 { display: none; }
+  .board-home .board-nav .nav-item { min-height: 44px; padding: 8px 12px; font-size: 15px; white-space: nowrap; scroll-snap-align: start; border: 1px solid var(--line); border-radius: 22px; flex: 0 0 auto; width: auto; }
+  .board-home .topbar { height: auto; min-height: 52px; padding: 8px 14px; }
+  .board-home .breadcrumb { display: none; }
+  .board-home .topbar-actions { width: 100%; justify-content: flex-end; gap: 8px; }
+  .board-home .topbar-actions button, .board-home .topbar-actions a { min-height: 40px; }
+  .board-home main { padding: 14px 12px 28px; }
+  .board-home .board-hero { min-height: 0; padding: 16px; border-radius: 14px; gap: 12px; flex-direction: column; }
+  .board-home .page-heading h1 { font-size: 26px; }
+  .board-home .page-heading p:last-child { font-size: 15px; }
+  .board-home .primary-button { min-height: 44px; font-size: 16px; }
+  .board-home .demo-strip { font-size: 13px; margin-bottom: 12px; flex-wrap: wrap; }
+  .board-home .metrics { gap: 8px; margin-bottom: 14px; }
+  .board-home .metric { padding: 12px 14px; }
+  .board-home .metric b { font-size: 28px; }
+  .board-home .metric p { font-size: 13px; }
+  .board-home .right-column { grid-template-columns: 1fr; gap: 12px; }
+  .board-home .right-column .panel-title h2, .board-home .panel-title h2 { font-size: 18px; }
+  .board-home .panel-title p { font-size: 13px; }
+  .board-home .task-toolbar { flex-wrap: wrap; }
+  .board-home .search-wrap { max-width: none; flex: 1 1 100%; }
+  .board-home .search-wrap input, .board-home .filter-row select { min-height: 44px; font-size: 16px; }
+  .board-home .filter-row { flex-wrap: wrap; gap: 8px; }
+  .board-home .filter-row label { flex: 1 1 140px; }
+  .board-home .filter-row select { width: 100%; }
+  .board-home .filter-description { flex: 1 1 100%; }
+  .board-home .task-title { font-size: 17px; text-align: left; }
+  .board-home .task-next { font-size: 15px; }
+  .board-home .task-meta, .board-home .owner-cell, .board-home .date-cell { font-size: 14px; }
+  .board-home .pill { font-size: 13px; }
+  .board-home .text-button { min-height: 40px; font-size: 15px; }
+  .board-home .table-footer { font-size: 13px; }
+  .board-home .event time, .board-home .event b { font-size: 15px; }
+  .board-home .calendar-grid { grid-template-columns: 1fr; }
+  .board-home .calendar-day { min-height: 0; }
+  .board-home dialog { width: calc(100vw - 16px); max-width: none; max-height: calc(100dvh - 16px); margin: auto; overflow-y: auto; }
+  .board-home dialog input, .board-home dialog select, .board-home dialog textarea { font-size: 16px; min-height: 44px; }
+  .board-home .form-grid { grid-template-columns: 1fr; }
+  .board-home .page-footer { font-size: 13px; }
+}
+
+/* Notice chalkboard and reservation card sit at the top of 오늘의 센터. */
+.board-home .board-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 16px; margin-bottom: 18px; align-items: stretch; }
+.board-home .chalkboard { background: #2e4034; border: 10px solid #a27a52; border-radius: 14px; box-shadow: inset 0 0 40px #0000004d, 0 8px 22px #3a2a1a26; color: #f2efe4; min-height: 260px; display: flex; flex-direction: column; position: relative; }
+.board-home .chalkboard::after { content: ""; position: absolute; left: 12%; right: 12%; bottom: -10px; height: 6px; background: #8a6440; border-radius: 3px 3px 0 0; }
+.board-home .chalkboard .panel-title h2 { color: #fffdf3; font-size: 22px; letter-spacing: -.02em; }
+.board-home .chalkboard .panel-title p { color: #c9d3c6; font-size: 14px; }
+.board-home .chalkboard .text-button { color: #fffdf3; border: 1px dashed #e8e3d0aa; border-radius: 8px; padding: 8px 12px; background: transparent; font-size: 15px; }
+.board-home .chalkboard .text-button:disabled { opacity: .55; }
+.board-home .chalkboard .notice-list { padding: 4px 22px 22px; flex: 1; }
+.board-home .chalkboard .notice-list > p { color: #e4e8dc; font-size: 17px; }
+.board-home .chalkboard .notice-list .pos-warn { color: #ffd7a3; }
+.board-home .chalkboard .notice-item { border-top: 1px dashed #e8e3d055; padding: 12px 0; color: #f2efe4; }
+.board-home .chalkboard .notice-item:first-child { border-top: 0; }
+.board-home .chalkboard .notice-item b { color: #fffdf3; font-size: 19px; }
+.board-home .chalkboard .notice-item span { color: #e8ece0; font-size: 16px; }
+.board-home .chalkboard .notice-item small { color: #b9c6b7; font-size: 13px; }
+.board-home .board-row #posSummary { margin: 0; }
+@media (max-width: 1010px) { .board-home .board-row { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .board-home .board-row { gap: 12px; margin-bottom: 14px; }
+  .board-home .chalkboard { border-width: 8px; min-height: 200px; }
+  .board-home .chalkboard .panel-title { padding: 14px 16px 8px; }
+  .board-home .chalkboard .notice-list { padding: 0 16px 16px; }
+}

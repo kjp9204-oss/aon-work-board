@@ -22,12 +22,12 @@
 .board-home .brand-description { color: var(--muted); border-color: var(--line); }
 .board-home .board-nav { display: grid; gap: 15px; margin-top: 14px; }
 .board-home .board-nav section { display: grid; gap: 3px; min-width: 0; }
-.board-home .board-nav h2 { margin: 0 9px 3px; font-size: 11px; text-transform: none; color: var(--muted); }
+.board-home .board-nav h2 { margin: 0 9px 3px; font-size: 15px; text-transform: none; color: var(--muted); }
 .board-home .board-nav .nav-item { color: var(--body); line-height: 1.35; }
 .board-home .board-nav .nav-item.active { color: var(--green); background: var(--pale); border-color: #f1cebb; }
 .board-home .board-nav .nav-item:hover { background: var(--pale); }
 .board-home .intake-pending { opacity: .8; }
-.board-home .intake-pending small { font-size: 10px; }
+.board-home .intake-pending small { font-size: 14px; }
 .board-home .topbar-actions { flex-wrap: wrap; }
 .board-home .board-hero {
   background: #efe2cc;

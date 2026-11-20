@@ -180,6 +180,7 @@
     $('lastUpdated').textContent = `${timeText(new Date())}에 시트 내용 확인 · 한국 시간`;
     renderOwners();
     render();
+    setTimeout(openPending, 0); // after the login/refresh call has finished loading
   }
   function expireSession() {
     if ((!credential && !guest) || Date.now() < expiresAt) return false;
@@ -352,7 +353,7 @@
     $('filterDescription').textContent = ({ today: '오늘 마감 · 미완료', overdue: '마감 지난 업무', waiting: '확인 대기' })[quickFilter] || (mine ? '내가 등록한 업무' : '전체 업무');
     const doneCount = tasks.filter(t => t.status === '완료').length;
     if (loaded && doneCount && status !== '완료') $('filterDescription').textContent += ` · 완료 ${doneCount}건 숨김`;
-    $('overviewLayout').hidden = ['calendar', 'ai', 'notice'].includes(page); $('noticePage').hidden = page !== 'notice'; $('calendarView').hidden = page !== 'calendar'; $('ai-dashboard').hidden = page !== 'ai';
+    $('overviewLayout').hidden = ['calendar', 'ai', 'notice'].includes(page); $('noticePage').hidden = page !== 'notice'; $('boardRow').hidden = page !== 'overview'; $('calendarView').hidden = page !== 'calendar'; $('ai-dashboard').hidden = page !== 'ai';
     $('overviewLayout').classList.toggle('tasks-only', page === 'tasks');
     document.querySelectorAll('[data-page]').forEach(button => { const selected = button.dataset.page === page; button.classList.toggle('active', selected); if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
     const title = ({ overview: '오늘의 센터', tasks: '업무', calendar: '센터 일정', ai: 'AI 대시보드', notice: '공지사항' })[page];
@@ -572,9 +573,42 @@
     } catch (error) { if (version === authVersion) { errorElement.textContent = errorText(error); if (authError(error)) showConnectionError(error); } }
     finally { saving = false; updateControls(); }
   }
-  document.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => { page = button.dataset.page; render(); }));
+  // Every screen and every task/notice has its own address so it can be shared as a link.
+  const PAGES = { home: 'overview', notice: 'notice', tasks: 'tasks', calendar: 'calendar', ai: 'ai' };
+  const pageHash = name => Object.keys(PAGES).find(key => PAGES[key] === name) || 'home';
+  let pendingOpen = null;
+  function setHash(hash) { if (location.hash !== hash) history.replaceState(null, '', hash); }
+  function applyHash() {
+    const [key, id] = location.hash.replace(/^#/, '').split('/');
+    if (key === 'ai-dashboard') page = 'ai';
+    else if (key === 'task' && id) { page = 'tasks'; pendingOpen = { kind: 'task', id }; }
+    else if (key === 'notice' && id) { page = 'notice'; pendingOpen = { kind: 'notice', id }; }
+    else if (PAGES[key]) page = PAGES[key];
+    render();
+    openPending();
+  }
+  function openPending() {
+    if (!pendingOpen || !loaded || loading || saving || isDialogOpen()) return;
+    const { kind, id } = pendingOpen;
+    const list = kind === 'task' ? tasks : notices;
+    if (!list.some(item => item.id === id)) { if (kind === 'task' || noticeState !== 'idle') { pendingOpen = null; toast('링크의 항목을 찾지 못했습니다. 이미 정리됐거나 권한이 없는 항목입니다.'); } return; }
+    pendingOpen = null;
+    if (kind === 'task') openTask(id); else openNotice(id);
+  }
+  function shareLink(hash) {
+    const url = `${location.origin}${location.pathname}${hash}`;
+    const done = () => toast('링크를 복사했습니다. 카톡·메시지에 붙여 넣으세요. 팀 계정으로 로그인해야 열립니다.');
+    if (navigator.share && matchMedia('(max-width: 760px)').matches) { navigator.share({ title: document.title, url }).catch(() => {}); return; }
+    if (navigator.clipboard?.writeText) { navigator.clipboard.writeText(url).then(done, () => window.prompt('이 주소를 복사하세요', url)); return; }
+    window.prompt('이 주소를 복사하세요', url);
+  }
+  document.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => { page = button.dataset.page; setHash('#' + pageHash(page)); render(); }));
+  window.addEventListener('hashchange', applyHash);
+  $('sharePage').addEventListener('click', () => shareLink('#' + pageHash(page)));
+  $('shareTask').addEventListener('click', () => { if (taskEdit && !taskEdit.isNew) shareLink('#task/' + taskEdit.id); else toast('저장한 뒤 링크를 복사할 수 있습니다.'); });
+  $('shareNotice').addEventListener('click', () => { if (noticeEdit && !noticeEdit.isNew) shareLink('#notice/' + noticeEdit.id); else toast('저장한 뒤 링크를 복사할 수 있습니다.'); });
   document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { if (button.dataset.filter === 'week') { page = 'calendar'; render(); return; } resetFilters(); quickFilter = button.dataset.filter; page = 'tasks'; render(); }));
-  $('openCalendar').addEventListener('click', () => { page = 'calendar'; render(); });
+  $('openCalendar').addEventListener('click', () => { page = 'calendar'; setHash('#calendar'); render(); });
   $('allTasks').addEventListener('click', () => { mine = false; render(); });
   $('myTasks').addEventListener('click', () => { mine = true; $('ownerFilter').value = ''; render(); });
   ['searchTasks', 'ownerFilter', 'statusFilter'].forEach(id => $(id).addEventListener(id === 'searchTasks' ? 'input' : 'change', render));
@@ -614,6 +648,5 @@
   document.addEventListener('visibilitychange', refreshVisible);
   setInterval(refreshVisible, 60000);
   window.addEventListener('beforeunload', event => { if (saving || isDialogOpen()) { event.preventDefault(); event.returnValue = ''; } });
-  if (location.hash === '#ai-dashboard') page = 'ai';
-  render(); updateControls(); initializeLogin();
+  applyHash(); updateControls(); initializeLogin();
 })();
