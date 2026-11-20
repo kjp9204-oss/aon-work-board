@@ -72,3 +72,35 @@ html { -webkit-text-size-adjust: 100%; }
   .board-home .chalkboard .panel-title { padding: 14px 16px 8px; }
   .board-home .chalkboard .notice-list { padding: 0 16px 16px; }
 }
+
+/* NEW marks and week-long glowing notices so the team does not miss changes. */
+@keyframes aonGlow { 0%, 100% { box-shadow: 0 0 0 0 #f4b84000; } 50% { box-shadow: 0 0 22px 4px #f4b840aa; } }
+@keyframes aonNew { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+.board-home .new-badge { display: inline-block; background: #bf2d24; color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .04em; line-height: 1; padding: 4px 6px; border-radius: 6px; margin-right: 7px; vertical-align: middle; animation: aonNew 1.6s ease-in-out infinite; }
+.board-home tr.is-new { background: #fff6ec; }
+.board-home .change-summary { background: #bf2d24; color: #fff; border-radius: 999px; padding: 3px 12px; font-weight: 700; font-size: 14px; }
+.board-home .chalkboard .notice-item.fresh b { color: #ffe9a8; text-shadow: 0 0 10px #ffd36a99; }
+.board-home .chalkboard .notice-date { font-style: normal; font-weight: 600; color: #b9c6b7; margin-right: 10px; font-size: 15px; }
+.board-home .chalkboard .notice-item.fresh .notice-date { color: #ffe9a8; }
+.board-home .chalkboard .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
+.board-home .chalk-more { margin: 0 22px 18px; align-self: flex-start; background: transparent; color: #fffdf3; border: 1px dashed #e8e3d0aa; border-radius: 8px; padding: 8px 14px; font-size: 15px; min-height: 40px; }
+.board-home .notice-page-list { display: grid; gap: 14px; padding: 4px 22px 24px; }
+.board-home .notice-card { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 18px; background: #fffdfa; border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; scroll-margin-top: 90px; }
+.board-home .notice-card.fresh { border: 2px solid #f2b84b; background: #fffaf0; animation: aonGlow 2.6s ease-in-out infinite; }
+.board-home .notice-card.flash { outline: 3px solid #bf2d24; }
+.board-home .notice-card.down { opacity: .55; }
+.board-home .notice-when strong { display: block; font-size: 20px; color: var(--ink); }
+.board-home .notice-when small { display: inline-block; margin-top: 6px; font-size: 13px; color: var(--muted); }
+.board-home .notice-when .fresh-label { background: #f2b84b; color: #3b2a0a; border-radius: 6px; padding: 2px 8px; font-weight: 700; }
+.board-home .notice-main h3 { margin: 0 0 8px; font-size: 20px; color: var(--ink); line-height: 1.45; }
+.board-home .notice-body { margin: 0 0 12px; font-size: 16px; line-height: 1.8; white-space: pre-line; color: var(--body); overflow-wrap: anywhere; }
+.board-home .notice-foot { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.board-home .notice-foot small { color: var(--muted); font-size: 14px; margin-right: auto; }
+@media (prefers-reduced-motion: reduce) { .board-home .notice-card.fresh, .board-home .new-badge { animation: none; } }
+@media (max-width: 760px) {
+  .board-home .notice-page-list { padding: 4px 12px 18px; }
+  .board-home .notice-card { grid-template-columns: 1fr; gap: 8px; padding: 16px; }
+  .board-home .notice-when { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .board-home .notice-when small { margin-top: 0; }
+  .board-home .chalk-more { margin: 0 16px 14px; }
+}

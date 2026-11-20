@@ -257,7 +257,7 @@ function validateBoardFields_(kind, input) {
     if (!NOTICE_STATUSES.includes(input.status)) return invalidInput_("공지 상태를 확인해 주세요.");
     return {
       id: id.toLowerCase(), title: textValue_(input.title, 1, 100, "공지 제목", false),
-      body: textValue_(input.body ?? "", 0, 1000, "공지 내용", true),
+      body: textValue_(input.body ?? "", 0, 3000, "공지 내용", true),
       owner: textValue_(input.owner, 1, 40, "작성자", false),
       date: dateValue_(input.date, false, "공지 날짜"), status: input.status
     };

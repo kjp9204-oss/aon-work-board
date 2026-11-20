@@ -268,7 +268,7 @@ test("notices save, take down by status, and auto-create their tab", () => {
   const noticeId = "9d1c2b3a-4e5f-4a6b-8c7d-0e1f2a3b4c5d";
   const notice = { id: noticeId, title: "다음 주 운영 회의", body: "월요일 10시\n안쪽 공간", owner: "재필님", date: "2026-11-20", status: "게시" };
   assert.deepEqual(call("listNotices").notices, []);
-  for (const invalid of [{ status: "삭제" }, { title: "" }, { body: "X".repeat(1001) }, { date: "2026-02-30" }]) {
+  for (const invalid of [{ status: "삭제" }, { title: "" }, { body: "X".repeat(3001) }, { date: "2026-02-30" }]) {
     assert.equal(call("createNotice", { ...notice, ...invalid }).status, 400);
   }
   assert.equal(call("createNotice", notice).notice.revision, 1);

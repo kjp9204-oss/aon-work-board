@@ -17,6 +17,17 @@
   let posSummaries = [], posState = 'idle', posEdit = null, notices = [], noticeState = 'idle', noticeEdit = null;
   let loaded = false, loading = false, saving = false, page = 'overview', quickFilter = '', mine = false;
   let taskEdit = null, eventEdit = null, toastTimer;
+  // NEW marks anything created or changed since this browser's previous visit (first visit: last 3 days).
+  const PREV_VISIT = (() => {
+    const fallback = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    try {
+      const stored = Number(localStorage.getItem('aon-last-visit'));
+      localStorage.setItem('aon-last-visit', String(Date.now()));
+      return Number.isFinite(stored) && stored > 0 ? stored : fallback;
+    } catch { return fallback; }
+  })();
+  const isNew = item => Date.parse(item?.updatedAt || '') > PREV_VISIT;
+  const newBadge = () => { const b = document.createElement('span'); b.className = 'new-badge'; b.textContent = 'NEW'; return b; };
   const node = (tag, className, text) => { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; };
   const isDialogOpen = () => $('taskDialog').open || $('eventDialog').open || $('posDialog').open || $('noticeDialog').open;
   function todayISO() {
@@ -337,7 +348,8 @@
     if (loaded) $('taskCount').textContent = visible.length;
     $('taskRows').replaceChildren();
     visible.forEach(task => {
-      const tr = node('tr'), main = node('td', 'task-main'), meta = node('div', 'task-meta');
+      const tr = node('tr', isNew(task) ? 'is-new' : ''), main = node('td', 'task-main'), meta = node('div', 'task-meta');
+      if (isNew(task)) meta.append(newBadge());
       meta.append(node('span', 'category-label', task.category));
       const title = node('button', 'task-title', task.title); title.type = 'button'; title.addEventListener('click', () => openTask(task.id));
       main.append(meta, title, node('p', 'task-next', task.next || '다음 행동을 정해 주세요.'));
@@ -362,27 +374,65 @@
     renderEvents(today, dates);
     renderPos(dates[0]);
     renderNotices();
+    renderChangeSummary();
+  }
+  function renderChangeSummary() {
+    const count = loaded ? [...tasks.filter(t => t.status !== '완료'), ...events, ...notices.filter(n => n.status === '게시'), ...posSummaries.slice(0, 1)].filter(isNew).length : 0;
+    $('changeSummary').hidden = !count;
+    $('changeSummary').textContent = `지난 방문 이후 새로 바뀐 것 ${count}개`;
   }
   function privateViewMessage(label) {
     return guest ? `${label}: 허용된 팀 계정에만 표시됩니다.` : `${label}: 허용된 Google 계정으로 로그인해 주세요.`;
   }
-  function renderNotices() {
-    renderNoticeList($('noticeList'), notices.filter(item => item.status === '게시').slice(0, 5));
-    renderNoticeList($('noticePageList'), notices);
+  function noticeAge(date) { return Math.round((Date.parse(todayISO()) - Date.parse(date)) / 86400000); }
+  const isFresh = item => item.status === '게시' && noticeAge(item.date) < 7;
+  function noticeDateLabel(date) {
+    const day = ['일', '월', '화', '수', '목', '금', '토'][new Date(`${date}T00:00:00Z`).getUTCDay()];
+    return `${date.slice(5).replace('-', '.')} (${day})`;
   }
-  function renderNoticeList(list, items) {
-    list.replaceChildren();
-    if (!loaded) { list.append(node('p', '', privateViewMessage('공지'))); return; }
-    if (noticeState === 'not-deployed') { list.append(node('p', 'pos-warn', '공지 저장이 아직 켜지지 않았습니다. 시트 웹앱(Apps Script)을 새 버전으로 배포하면 바로 쓸 수 있습니다.')); return; }
-    if (noticeState === 'error') { list.append(node('p', 'pos-warn', '공지를 불러오지 못했습니다. 새로고침해 주세요.')); return; }
-    if (!items.length) { list.append(node('p', '', '게시된 공지가 없습니다. ‘공지 작성’으로 추가하세요.')); return; }
-    for (const item of items) {
-      const button = node('button', `notice-item${item.status === '내림' ? ' down' : ''}`); button.type = 'button';
-      button.append(node('b', '', item.status === '내림' ? `[내림] ${item.title}` : item.title));
-      if (item.body) button.append(node('span', '', item.body));
-      button.append(node('small', '', `${item.date.replaceAll('-', '. ')} · ${item.owner}`));
-      button.addEventListener('click', () => openNotice(item.id));
-      list.append(button);
+  function noticeState_() {
+    if (!loaded) return privateViewMessage('공지');
+    if (noticeState === 'not-deployed') return '공지 저장이 아직 켜지지 않았습니다. 시트 웹앱(Apps Script)을 새 버전으로 배포하면 바로 쓸 수 있습니다.';
+    if (noticeState === 'error') return '공지를 불러오지 못했습니다. 새로고침해 주세요.';
+    return '';
+  }
+  function renderNotices() {
+    const posted = notices.filter(item => item.status === '게시').sort((a, b) => b.date.localeCompare(a.date) || b.updatedAt.localeCompare(a.updatedAt));
+    const down = notices.filter(item => item.status !== '게시').sort((a, b) => b.date.localeCompare(a.date));
+    // Chalkboard on 오늘의 센터: newest posted notices, short.
+    const board = $('noticeList'); board.replaceChildren();
+    const problem = noticeState_();
+    if (problem) board.append(node('p', noticeState === 'ready' || !loaded ? '' : 'pos-warn', problem));
+    else if (!posted.length) board.append(node('p', '', '게시된 공지가 없습니다. ‘공지 작성’으로 추가하세요.'));
+    else for (const item of posted.slice(0, 4)) {
+      const button = node('button', `notice-item${isFresh(item) ? ' fresh' : ''}`); button.type = 'button';
+      const head = node('b'); head.append(node('em', 'notice-date', noticeDateLabel(item.date)));
+      if (isNew(item)) head.append(newBadge());
+      head.append(document.createTextNode(item.title));
+      button.append(head);
+      if (item.body) button.append(node('span', 'clamp', item.body));
+      button.addEventListener('click', () => { page = 'notice'; history.replaceState(null, '', '#notice'); render(); document.getElementById('notice-' + item.id)?.scrollIntoView({ block: 'start' }); });
+      board.append(button);
+    }
+    $('openNoticePage').hidden = !loaded || Boolean(problem) || !posted.length;
+    // Full notice page: date · notice, long text, fresh ones glow for a week.
+    const list = $('noticePageList'); list.replaceChildren();
+    if (problem) { list.append(node('p', 'pos-warn', problem)); return; }
+    if (!notices.length) { list.append(node('p', '', '게시된 공지가 없습니다. ‘공지 작성’으로 추가하세요.')); return; }
+    for (const item of [...posted, ...down]) {
+      const card = node('article', `notice-card${isFresh(item) ? ' fresh' : ''}${item.status !== '게시' ? ' down' : ''}`); card.id = 'notice-' + item.id;
+      const when = node('div', 'notice-when'); when.append(node('strong', '', noticeDateLabel(item.date)));
+      if (isFresh(item)) when.append(node('small', 'fresh-label', '이번 주 공지'));
+      if (item.status !== '게시') when.append(node('small', '', '내림'));
+      const body = node('div', 'notice-main');
+      const title = node('h3'); if (isNew(item)) title.append(newBadge()); title.append(document.createTextNode(item.title));
+      body.append(title);
+      if (item.body) body.append(node('p', 'notice-body', item.body));
+      const foot = node('div', 'notice-foot'); foot.append(node('small', '', item.owner));
+      const edit = node('button', 'text-button', '수정'); edit.type = 'button'; edit.disabled = !user || noticeState !== 'ready'; edit.addEventListener('click', () => openNotice(item.id));
+      const share = node('button', 'text-button', '링크 복사'); share.type = 'button'; share.addEventListener('click', () => shareLink('#notice/' + item.id));
+      foot.append(edit, share); body.append(foot);
+      card.append(when, body); list.append(card);
     }
   }
   function openNotice(id) {
@@ -433,7 +483,7 @@
     const latest = current || posSummaries[0];
     if (!latest) { body.append(node('p', '', '아직 가져온 요약이 없습니다. 토스 POS를 확인한 뒤 ‘요약 입력’으로 기록합니다.')); return; }
     if (!current) body.append(node('p', 'pos-warn', '이번 주 요약은 아직 없습니다. 최근 기록을 보여 드립니다.'));
-    const total = node('p', 'pos-total', `예약 ${latest.total}건`); total.append(node('small', '', latest.period));
+    const total = node('p', 'pos-total', `예약 ${latest.total}건`); total.append(node('small', '', latest.period)); if (isNew(latest)) total.prepend(newBadge());
     body.append(total);
     for (const [label, value] of [['요일', latest.byDay], ['시간대', latest.byTime], ['메모', latest.note]]) {
       if (!value) continue;
@@ -483,7 +533,7 @@
     const daily = sorted.filter(event => event.date === today); $('todayEvents').replaceChildren();
     daily.forEach(event => {
       const item = node('button', 'event event-button'); item.type = 'button'; item.addEventListener('click', () => openEvent(event.id));
-      const detail = node('span'); detail.append(node('b', '', event.title), node('small', '', event.owner)); item.append(node('time', '', event.time), detail); $('todayEvents').append(item);
+      const detail = node('span'); if (isNew(event)) detail.append(newBadge()); detail.append(node('b', '', event.title), node('small', '', event.owner)); item.append(node('time', '', event.time), detail); $('todayEvents').append(item);
     });
     const privateSchedule = privateViewMessage('센터 일정');
     if (!daily.length) $('todayEvents').append(node('p', 'empty-events', loaded ? '오늘 등록된 일정이 없습니다.' : privateSchedule));
@@ -593,7 +643,9 @@
     const list = kind === 'task' ? tasks : notices;
     if (!list.some(item => item.id === id)) { if (kind === 'task' || noticeState !== 'idle') { pendingOpen = null; toast('링크의 항목을 찾지 못했습니다. 이미 정리됐거나 권한이 없는 항목입니다.'); } return; }
     pendingOpen = null;
-    if (kind === 'task') openTask(id); else openNotice(id);
+    if (kind === 'task') { openTask(id); return; }
+    const card = document.getElementById('notice-' + id);
+    if (card) { card.scrollIntoView({ block: 'start' }); card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 2500); }
   }
   function shareLink(hash) {
     const url = `${location.origin}${location.pathname}${hash}`;
@@ -617,6 +669,7 @@
   $('addPos').addEventListener('click', openPos);
   $('addNotice').addEventListener('click', () => openNotice());
   $('addNoticePage').addEventListener('click', () => openNotice());
+  $('openNoticePage').addEventListener('click', () => { page = 'notice'; history.replaceState(null, '', '#notice'); render(); window.scrollTo(0, 0); });
   for (const id of ['closeNoticeDialog', 'cancelNoticeDialog']) $(id).addEventListener('click', () => { if (!saving) $('noticeDialog').close(); });
   $('noticeDialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
   $('noticeForm').addEventListener('submit', event => { event.preventDefault(); persistNotice(); });
