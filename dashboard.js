@@ -13,11 +13,11 @@
   let credential = '', expiresAt = 0, expiryTimer, authVersion = 0, googleId;
   const STATUSES = ['접수', '진행 중', '확인 대기', '보류', '완료'];
   const CATEGORIES = ['운영·시설', '직원·교육', '회의·행사', '블로그·홍보'];
-  let tasks = [], events = [], user = null;
+  let tasks = [], events = [], user = null, posSummaries = [], posState = 'idle', posEdit = null;
   let loaded = false, loading = false, saving = false, page = 'overview', quickFilter = '', mine = false;
   let taskEdit = null, eventEdit = null, toastTimer;
   const node = (tag, className, text) => { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; };
-  const isDialogOpen = () => $('taskDialog').open || $('eventDialog').open;
+  const isDialogOpen = () => $('taskDialog').open || $('eventDialog').open || $('posDialog').open;
   function todayISO() {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
     const part = type => parts.find(p => p.type === type).value;
@@ -47,6 +47,9 @@
     }
     taskEdit = null;
     eventEdit = null;
+    if ($('posDialog').open) $('posDialog').close();
+    $('posForm').reset();
+    posEdit = null;
   }
   function clearSession() {
     authVersion += 1;
@@ -56,6 +59,8 @@
     user = null;
     tasks = [];
     events = [];
+    posSummaries = [];
+    posState = 'idle';
     loaded = false;
     resetFilters();
     $('accountName').textContent = 'Google 로그인 필요';
@@ -90,10 +95,12 @@
     $('refreshData').disabled = disabled;
     $('saveTask').disabled = disabled;
     $('saveEvent').disabled = disabled;
+    $('addPos').disabled = disabled || posState !== 'ready';
+    $('savePos').disabled = disabled;
     $('logout').hidden = !user;
     $('logout').disabled = loading || saving;
     $('googleSignIn').hidden = Boolean(user);
-    document.querySelectorAll('#taskForm input, #taskForm select, #taskForm textarea, #eventForm input').forEach(input => { input.disabled = saving; });
+    document.querySelectorAll('#taskForm input, #taskForm select, #taskForm textarea, #eventForm input, #posForm input, #posForm textarea').forEach(input => { input.disabled = saving; });
     for (const id of ['closeDialog', 'cancelDialog', 'closeEventDialog', 'cancelEventDialog', 'reloadTask', 'reloadEvent', 'taskResumeSession', 'eventResumeSession']) $(id).disabled = saving || loading;
   }
   async function api(action, data = {}, token = credential) {
@@ -124,14 +131,27 @@
       throw error;
     } finally { clearTimeout(timeout); }
   }
+  // The reservation summary is optional: an older Apps Script deployment without it
+  // must not stop tasks and events from loading.
+  async function readPos(token) {
+    try {
+      const data = await api('listPos', {}, token);
+      return { list: Array.isArray(data.posSummaries) ? data.posSummaries : [], state: 'ready' };
+    } catch (error) {
+      if (authError(error)) throw error;
+      return { list: [], state: error.code === 'UNKNOWN_ACTION' ? 'not-deployed' : 'error' };
+    }
+  }
   async function readBoard(token = credential) {
-    const [taskData, eventData] = await Promise.all([api('listTasks', {}, token), api('listEvents', {}, token)]);
+    const [taskData, eventData, pos] = await Promise.all([api('listTasks', {}, token), api('listEvents', {}, token), readPos(token)]);
     if (!Array.isArray(taskData.tasks) || !Array.isArray(eventData.events)) throw new Error('업무·일정 응답을 확인하지 못했습니다.');
-    return { tasks: taskData.tasks, events: eventData.events };
+    return { tasks: taskData.tasks, events: eventData.events, pos };
   }
   function displayBoard(board) {
     tasks = board.tasks;
     events = board.events;
+    posSummaries = board.pos.list;
+    posState = board.pos.state;
     loaded = true;
     clearConnectionError();
     setStatus('시트 저장');
@@ -309,6 +329,63 @@
     $('pageTitle').textContent = title; $('breadcrumbCurrent').textContent = title;
     $('pageDescription').textContent = ({ overview: '오늘 할 일과 센터 일정, 다음 행동을 확인하세요.', tasks: '담당자와 마감, 다음 행동을 한곳에서 확인하세요.', calendar: '회의와 교육 일정을 미리 확인하고 준비하세요.' })[page];
     renderEvents(today, dates);
+    renderPos(dates[0]);
+  }
+  function renderPos(weekStart) {
+    const body = $('posBody');
+    body.replaceChildren();
+    if (!loaded) { body.append(node('p', '', 'Google 로그인 후 예약 요약이 표시됩니다.')); return; }
+    if (posState === 'not-deployed') { body.append(node('p', 'pos-warn', '시트 웹앱이 아직 예약 요약을 받지 못합니다. Apps Script 코드를 갱신하면 표시됩니다.')); return; }
+    if (posState === 'error') { body.append(node('p', 'pos-warn', '예약 요약을 불러오지 못했습니다. 새로고침해 주세요.')); return; }
+    const current = posSummaries.find(item => item.weekStart === weekStart);
+    const latest = current || posSummaries[0];
+    if (!latest) { body.append(node('p', '', '아직 가져온 요약이 없습니다. 토스 POS를 확인한 뒤 ‘요약 입력’으로 기록합니다.')); return; }
+    if (!current) body.append(node('p', 'pos-warn', '이번 주 요약은 아직 없습니다. 최근 기록을 보여 드립니다.'));
+    const total = node('p', 'pos-total', `예약 ${latest.total}건`); total.append(node('small', '', latest.period));
+    body.append(total);
+    for (const [label, value] of [['요일', latest.byDay], ['시간대', latest.byTime], ['메모', latest.note]]) {
+      if (!value) continue;
+      const line = node('p', 'pos-line'); line.append(node('b', '', label), document.createTextNode(value)); body.append(line);
+    }
+    const saved = Date.parse(latest.updatedAt);
+    body.append(node('p', 'pos-meta', `토스 POS 확인 ${latest.checkedAt}${Number.isFinite(saved) ? ` · 시트 저장 ${new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(saved))}` : ''}`));
+  }
+  function openPos() {
+    if (!user || !loaded || loading || saving || posState !== 'ready') return;
+    const weekStart = weekDates(todayISO())[0];
+    const found = posSummaries.find(item => item.weekStart === weekStart);
+    posEdit = { principal: user.id, id: found?.id || crypto.randomUUID(), revision: found?.revision, isNew: !found };
+    const end = offsetDate(weekStart, 6);
+    $('posWeekStart').value = weekStart;
+    $('posPeriod').value = found?.period || `${dateText(weekStart)} ~ ${dateText(end)}`;
+    $('posTotal').value = found?.total ?? '';
+    $('posByDay').value = found?.byDay || ''; $('posByTime').value = found?.byTime || ''; $('posNote').value = found?.note || '';
+    const now = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date());
+    $('posCheckedAt').value = now;
+    $('posFormError').textContent = '';
+    if (!$('posDialog').open) $('posDialog').showModal(); $('posTotal').focus();
+  }
+  async function persistPos() {
+    if (expireSession() || saving || !user || !loaded || !posEdit) return;
+    const version = authVersion;
+    const input = { weekStart: $('posWeekStart').value, period: $('posPeriod').value.trim(), total: $('posTotal').value.trim(), byDay: $('posByDay').value.trim(), byTime: $('posByTime').value.trim(), note: $('posNote').value.trim(), checkedAt: $('posCheckedAt').value.trim() };
+    if (!input.weekStart || !input.period || !input.total || !input.checkedAt) { $('posFormError').textContent = '주 시작일, 기간, 예약 건수, 확인 시각을 입력해 주세요.'; return; }
+    saving = true; updateControls(); setStatus('시트에 저장 중');
+    try {
+      const data = posEdit.isNew ? { id: posEdit.id, ...input } : { id: posEdit.id, ...input, revision: posEdit.revision };
+      const result = await api(posEdit.isNew ? 'createPos' : 'updatePos', data);
+      if (version !== authVersion || expireSession()) return;
+      const item = result.pos;
+      if (!item || item.id !== posEdit.id) throw new Error('저장 결과를 확인하지 못했습니다. 입력 내용을 유지합니다.');
+      posSummaries = [item, ...posSummaries.filter(entry => entry.id !== item.id)].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+      $('posDialog').close(); render();
+      setStatus('시트 저장'); toast('예약 요약을 시트에 저장했습니다.');
+    } catch (error) {
+      if (version !== authVersion) return;
+      $('posFormError').textContent = error.status === 409 ? '다른 곳에서 먼저 수정했습니다. 창을 닫고 새로고침한 뒤 다시 입력해 주세요.' : errorText(error);
+      setStatus('저장 확인 실패 · 입력 유지', 'error');
+      if (authError(error)) showConnectionError(error);
+    } finally { saving = false; updateControls(); }
   }
   function renderEvents(today, dates) {
     const sorted = [...events].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
@@ -412,6 +489,10 @@
   ['searchTasks', 'ownerFilter', 'statusFilter'].forEach(id => $(id).addEventListener(id === 'searchTasks' ? 'input' : 'change', render));
   $('clearFilters').addEventListener('click', () => { resetFilters(); render(); });
   $('addTask').addEventListener('click', () => openTask()); $('addEvent').addEventListener('click', () => openEvent());
+  $('addPos').addEventListener('click', openPos);
+  for (const id of ['closePosDialog', 'cancelPosDialog']) $(id).addEventListener('click', () => { if (!saving) $('posDialog').close(); });
+  $('posDialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+  $('posForm').addEventListener('submit', event => { event.preventDefault(); persistPos(); });
   $('refreshData').addEventListener('click', () => refresh());
   for (const id of ['closeDialog', 'cancelDialog']) $(id).addEventListener('click', () => { if (!saving) $('taskDialog').close(); });
   for (const id of ['closeEventDialog', 'cancelEventDialog']) $(id).addEventListener('click', () => { if (!saving) $('eventDialog').close(); });

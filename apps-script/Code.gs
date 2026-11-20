@@ -8,6 +8,12 @@ const BOARD_DATA_SCHEMA = Object.freeze({
     tab: "일정",
     fields: ["id", "title", "owner", "date", "time"],
     headers: ["id", "title", "owner", "date", "time", "revision", "updatedAt", "updatedBy"]
+  },
+  // Weekly Toss POS reservation summary: counts only, never customer names, phones, memos or captures.
+  pos: {
+    tab: "예약 요약",
+    fields: ["id", "weekStart", "period", "total", "byDay", "byTime", "note", "checkedAt"],
+    headers: ["id", "weekStart", "period", "total", "byDay", "byTime", "note", "checkedAt", "revision", "updatedAt", "updatedBy"]
   }
 });
 const ALLOWED_EMAILS_TAB = "허용 계정";
@@ -21,8 +27,12 @@ const DATA_ACTIONS = Object.freeze({
   createTask: ["task", "create"],
   updateTask: ["task", "update"],
   createEvent: ["event", "create"],
-  updateEvent: ["event", "update"]
+  updateEvent: ["event", "update"],
+  listPos: ["pos", "list"],
+  createPos: ["pos", "create"],
+  updatePos: ["pos", "update"]
 });
+const LIST_KEYS = Object.freeze({ task: "tasks", event: "events", pos: "posSummaries" });
 
 class BoardError_ extends Error {
   constructor(status, code, message) {
@@ -114,14 +124,15 @@ function routeBoardRequest_(spreadsheet, actor, request) {
   }
   const [kind, action] = DATA_ACTIONS[request.action];
   const schema = BOARD_DATA_SCHEMA[kind];
-  const sheet = ensureTab_(spreadsheet, schema.tab, schema.headers);
+  const sheet = kind === "pos" ? ensurePosTab_(spreadsheet) : ensureTab_(spreadsheet, schema.tab, schema.headers);
   const audit = ensureTab_(spreadsheet, AUDIT_TAB, AUDIT_HEADERS);
   if (action === "list") {
     const creators = creationIndex_(audit, kind);
     const records = boardRows_(sheet, schema.headers).map(entry => withCreator_(entry.record, creators));
     records.sort(kind === "task" ? (a, b) => b.updatedAt.localeCompare(a.updatedAt) :
+      kind === "pos" ? (a, b) => b.weekStart.localeCompare(a.weekStart) || b.updatedAt.localeCompare(a.updatedAt) :
       (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-    return { ok: true, storage: "sheet", [kind + "s"]: records };
+    return { ok: true, storage: "sheet", [LIST_KEYS[kind]]: records };
   }
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) throw new BoardError_(503, "SHEET_BUSY", "다른 저장이 진행 중입니다. 잠시 후 시도해 주세요.");
@@ -132,6 +143,19 @@ function routeBoardRequest_(spreadsheet, actor, request) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// The reservation tab was added after the first deployment, so create it on first use
+// with exact headers instead of failing every board read until setup is re-run.
+function ensurePosTab_(spreadsheet) {
+  const schema = BOARD_DATA_SCHEMA.pos;
+  const existing = spreadsheet.getSheetByName(schema.tab);
+  if (existing && existing.getLastRow() > 0) return ensureTab_(spreadsheet, schema.tab, schema.headers);
+  const sheet = existing || spreadsheet.insertSheet(schema.tab);
+  sheet.getRange(1, 1, 1, schema.headers.length).setValues([schema.headers]).setFontWeight("bold");
+  sheet.setFrozenRows(1);
+  SpreadsheetApp.flush();
+  return sheet;
 }
 
 function boardRows_(sheet, headers) {
@@ -148,7 +172,7 @@ function boardRows_(sheet, headers) {
 
 function normalizeStored_(value, key) {
   if (!(value instanceof Date)) return value;
-  if (key === "due" || key === "date") return Utilities.formatDate(value, "Asia/Seoul", "yyyy-MM-dd");
+  if (key === "due" || key === "date" || key === "weekStart") return Utilities.formatDate(value, "Asia/Seoul", "yyyy-MM-dd");
   if (key === "time") return Utilities.formatDate(value, "Asia/Seoul", "HH:mm");
   return value.toISOString();
 }
@@ -200,6 +224,17 @@ function validateBoardFields_(kind, input) {
   const id = input.id;
   if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
     return invalidInput_("업무 또는 일정 ID를 확인해 주세요.");
+  }
+  if (kind === "pos") {
+    return {
+      id: id.toLowerCase(), weekStart: dateValue_(input.weekStart, false, "주 시작일"),
+      period: textValue_(input.period, 1, 40, "기간", false),
+      total: textValue_(String(input.total ?? ""), 1, 20, "예약 건수", false),
+      byDay: textValue_(input.byDay ?? "", 0, 200, "요일별 건수", true),
+      byTime: textValue_(input.byTime ?? "", 0, 200, "시간대별 건수", true),
+      note: textValue_(input.note ?? "", 0, 200, "메모", true),
+      checkedAt: textValue_(input.checkedAt, 1, 40, "확인 시각", false)
+    };
   }
   const title = textValue_(input.title, 1, 100, "제목", false);
   const owner = textValue_(input.owner, 1, 40, "담당", false);
@@ -306,6 +341,7 @@ function prepareAonSpreadsheet() {
   const headersByTab = [
     [BOARD_DATA_SCHEMA.task.tab, BOARD_DATA_SCHEMA.task.headers],
     [BOARD_DATA_SCHEMA.event.tab, BOARD_DATA_SCHEMA.event.headers],
+    [BOARD_DATA_SCHEMA.pos.tab, BOARD_DATA_SCHEMA.pos.headers],
     [ALLOWED_EMAILS_TAB, ["email"]],
     [AUDIT_TAB, AUDIT_HEADERS]
   ];

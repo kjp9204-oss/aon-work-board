@@ -121,7 +121,7 @@ function fixture() {
 
 test("bound setup initializes exact headers and preserves named records on another run", () => {
   const { context, call, tabs, props } = fixture();
-  assert.deepEqual([...tabs.keys()], ["업무", "일정", "허용 계정", "변경 기록"]);
+  assert.deepEqual([...tabs.keys()], ["업무", "일정", "예약 요약", "허용 계정", "변경 기록"]);
   assert.equal(props.get("AON_SHEET_ID"), fakeSheetId);
   assert.deepEqual(tabs.get("업무").rows[0], ["id", "title", "category", "owner", "due", "status", "next", "revision", "updatedAt", "updatedBy"]);
   assert.deepEqual(tabs.get("일정").rows[0], ["id", "title", "owner", "date", "time", "revision", "updatedAt", "updatedBy"]);
@@ -217,4 +217,24 @@ test("failed Sheets batch does not report success or strand the revision lock", 
   assert.equal(tabs.get("변경 기록").rows.length, 1);
   options.working = true;
   assert.equal(call("createTask", task).ok, true);
+});
+
+test("weekly POS summary saves counts only, updates by revision, and creates its tab for older sheets", () => {
+  const { call, tabs } = fixture();
+  tabs.delete("예약 요약");
+  const posId = "5b0f3c2e-7a41-4c1d-9e2a-1f6b8d3c4a55";
+  const summary = { id: posId, weekStart: "2026-11-16", period: "11월 16일 ~ 11월 22일", total: 23,
+    byDay: "월 4 · 화 5 · 수 3 · 목 6 · 금 5 · 토 0 · 일 0", byTime: "오전 7 · 오후 12 · 저녁 4", note: "토·일 휴무", checkedAt: "2026-11-20 16:10" };
+  assert.deepEqual(call("listPos").posSummaries, []);
+  assert.deepEqual(tabs.get("예약 요약").rows[0], ["id", "weekStart", "period", "total", "byDay", "byTime", "note", "checkedAt", "revision", "updatedAt", "updatedBy"]);
+  for (const invalid of [{ weekStart: "2026-11-31" }, { period: "" }, { total: "" }, { byDay: "X".repeat(201) }, { checkedAt: "" }, { customer: "이름" }]) {
+    assert.equal(call("createPos", { ...summary, ...invalid }).status, 400);
+  }
+  const created = call("createPos", summary);
+  assert.equal(created.pos.total, "23");
+  assert.equal(call("updatePos", { id: posId, revision: 1, total: "24", checkedAt: "2026-11-20 18:00" }).pos.revision, 2);
+  const listed = call("listPos").posSummaries;
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].total, "24");
+  assert.equal(call("listTasks").ok, true);
 });
