@@ -304,7 +304,8 @@
       for (const id of ['todayCount', 'overdueCount', 'waitingCount', 'weekCount', 'taskCount']) $(id).textContent = '—';
     }
     const query = $('searchTasks').value.trim().toLowerCase(), owner = $('ownerFilter').value, status = $('statusFilter').value;
-    const visible = tasks.filter(t => (!mine || t.createdBy === user?.id) && (!owner || t.owner === owner) && (!status || t.status === status) && (!query || `${t.title} ${t.next} ${t.category} ${t.owner}`.toLowerCase().includes(query)) && (!quickFilter || (quickFilter === 'today' && active(t) && t.due === today) || (quickFilter === 'overdue' && active(t) && t.due && t.due < today) || (quickFilter === 'waiting' && t.status === '확인 대기')));
+    // Finished tasks stay in the sheet but leave the working list; choose ‘완료’ in the status filter to see them.
+    const visible = tasks.filter(t => (status === '완료' || t.status !== '완료') && (!mine || t.createdBy === user?.id) && (!owner || t.owner === owner) && (!status || t.status === status) && (!query || `${t.title} ${t.next} ${t.category} ${t.owner}`.toLowerCase().includes(query)) && (!quickFilter || (quickFilter === 'today' && active(t) && t.due === today) || (quickFilter === 'overdue' && active(t) && t.due && t.due < today) || (quickFilter === 'waiting' && t.status === '확인 대기')));
     if (loaded) $('taskCount').textContent = visible.length;
     $('taskRows').replaceChildren();
     visible.forEach(task => {
@@ -317,11 +318,13 @@
       const statusCell = node('td'); statusCell.append(node('span', `pill ${badgeClass(task.status)}`, task.status));
       tr.append(main, node('td', 'owner-cell', task.owner), due, statusCell); $('taskRows').append(tr);
     });
-    $('emptyTasks').textContent = !loaded ? 'Google 로그인 후 업무가 표시됩니다.' : tasks.length ? '조건에 맞는 업무가 없습니다.' : '등록된 업무가 없습니다. ‘업무 등록’으로 첫 업무를 추가하세요.';
+    $('emptyTasks').textContent = !loaded ? 'Google 로그인 후 업무가 표시됩니다.' : tasks.some(t => t.status !== '완료') || status === '완료' ? '조건에 맞는 업무가 없습니다.' : tasks.length ? '진행 중인 업무가 없습니다. 끝난 업무는 상태에서 ‘완료’를 고르면 보입니다.' : '등록된 업무가 없습니다. ‘업무 등록’으로 첫 업무를 추가하세요.';
     $('emptyTasks').hidden = visible.length !== 0;
     $('allTasks').classList.toggle('selected', !mine); $('myTasks').classList.toggle('selected', mine);
     $('allTasks').setAttribute('aria-pressed', String(!mine)); $('myTasks').setAttribute('aria-pressed', String(mine));
     $('filterDescription').textContent = ({ today: '오늘 마감 · 미완료', overdue: '마감 지난 업무', waiting: '확인 대기' })[quickFilter] || (mine ? '내가 등록한 업무' : '전체 업무');
+    const doneCount = tasks.filter(t => t.status === '완료').length;
+    if (loaded && doneCount && status !== '완료') $('filterDescription').textContent += ` · 완료 ${doneCount}건 숨김`;
     $('overviewLayout').hidden = page === 'calendar'; $('calendarView').hidden = page !== 'calendar';
     $('overviewLayout').classList.toggle('tasks-only', page === 'tasks');
     document.querySelectorAll('[data-page]').forEach(button => { const selected = button.dataset.page === page; button.classList.toggle('active', selected); if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
