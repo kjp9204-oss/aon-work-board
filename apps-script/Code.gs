@@ -71,7 +71,16 @@ function doPost(event) {
     const user = readGoogleIdToken_(request.token, clientId, Math.floor(Date.now() / 1000), googleSigningKey_);
     if (!user) throw new BoardError_(401, "AUTH_REQUIRED", "Google 계정으로 다시 로그인해 주세요.");
 
+    if (!user.emailAuthoritative) {
+      if (request.action === "session") return boardJson_(guestSession_());
+      throw new BoardError_(403, "GOOGLE_EMAIL_REQUIRED", "센터 운영 데이터는 허용된 Gmail 또는 관리되는 Google Workspace 계정으로 이용해 주세요.");
+    }
     const spreadsheet = SpreadsheetApp.openById(sheetId);
+    if (request.action === "session") {
+      return boardJson_(isAllowedEmail_(spreadsheet, user)
+        ? { ok: true, storage: "sheet", access: "member", user: { id: user.id, displayName: user.displayName } }
+        : guestSession_());
+    }
     requireAllowedEmail_(spreadsheet, user);
     return boardJson_(routeBoardRequest_(spreadsheet, user, request));
   } catch (error) {
@@ -117,20 +126,26 @@ function ensureTab_(spreadsheet, name, headers) {
   return sheet;
 }
 
-function requireAllowedEmail_(spreadsheet, actor) {
+function guestSession_() {
+  return { ok: true, storage: "sheet", access: "guest" };
+}
+
+function isAllowedEmail_(spreadsheet, actor) {
   const sheet = ensureTab_(spreadsheet, ALLOWED_EMAILS_TAB, ["email"]);
   const count = sheet.getLastRow() - 1;
-  const allowed = count > 0 && sheet.getRange(2, 1, count, 1).getValues().some(row => {
+  return count > 0 && sheet.getRange(2, 1, count, 1).getValues().some(row => {
     const email = typeof row[0] === "string" ? row[0].trim().toLowerCase() : "";
     return email === actor.email;
   });
-  if (!allowed) throw new BoardError_(403, "ACCOUNT_NOT_ALLOWED", "이 계정은 AON 업무보드 사용 권한이 없습니다.");
+}
+
+function requireAllowedEmail_(spreadsheet, actor) {
+  if (!isAllowedEmail_(spreadsheet, actor)) {
+    throw new BoardError_(403, "ACCOUNT_NOT_ALLOWED", "이 계정은 AON 센터 운영 데이터를 사용할 권한이 없습니다.");
+  }
 }
 
 function routeBoardRequest_(spreadsheet, actor, request) {
-  if (request.action === "session") {
-    return { ok: true, storage: "sheet", user: { id: actor.id, displayName: actor.displayName } };
-  }
   if (!hasOwn_(DATA_ACTIONS, request.action)) {
     throw new BoardError_(400, "UNKNOWN_ACTION", "지원하지 않는 요청입니다.");
   }

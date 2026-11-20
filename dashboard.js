@@ -13,7 +13,8 @@
   let credential = '', expiresAt = 0, expiryTimer, authVersion = 0, googleId;
   const STATUSES = ['접수', '진행 중', '확인 대기', '보류', '완료'];
   const CATEGORIES = ['운영·시설', '직원·교육', '회의·행사', '블로그·홍보'];
-  let tasks = [], events = [], user = null, posSummaries = [], posState = 'idle', posEdit = null, notices = [], noticeState = 'idle', noticeEdit = null;
+  let tasks = [], events = [], user = null, guest = false;
+  let posSummaries = [], posState = 'idle', posEdit = null, notices = [], noticeState = 'idle', noticeEdit = null;
   let loaded = false, loading = false, saving = false, page = 'overview', quickFilter = '', mine = false;
   let taskEdit = null, eventEdit = null, toastTimer;
   const node = (tag, className, text) => { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; };
@@ -51,11 +52,13 @@
     posEdit = null;
     noticeEdit = null;
   }
-  function clearSession() {
+  function clearSession({ guestUntil = 0 } = {}) {
     authVersion += 1;
     clearTimeout(expiryTimer);
     credential = '';
-    expiresAt = 0;
+    guest = guestUntil > Date.now();
+    expiresAt = guest ? guestUntil : 0;
+    if (guest) expiryTimer = setTimeout(expireSession, expiresAt - Date.now());
     user = null;
     tasks = [];
     events = [];
@@ -65,12 +68,24 @@
     noticeState = 'idle';
     loaded = false;
     resetFilters();
-    $('accountName').textContent = 'Google 로그인 필요';
-    $('lastUpdated').textContent = 'Google 로그인 후 시트 내용을 불러옵니다.';
+    $('accountName').textContent = guest ? '게스트' : 'Google 로그인 필요';
+    $('lastUpdated').textContent = guest ? '센터 운영 데이터는 허용된 팀 계정에만 표시됩니다.' : 'Google 로그인 후 시트 내용을 불러옵니다.';
     renderOwners();
     render();
   }
+  function enterGuest(exp) {
+    discardDraft();
+    clearSession({ guestUntil: exp });
+    clearConnectionError();
+    setStatus('게스트 · 공개 화면');
+    updateControls();
+  }
   function showConnectionError(error) {
+    if (user && expiresAt > Date.now() && error.status === 403
+        && ['ACCOUNT_NOT_ALLOWED', 'GOOGLE_EMAIL_REQUIRED'].includes(error.code)) {
+      enterGuest(expiresAt);
+      return;
+    }
     if (authError(error)) clearSession();
     setStatus(authError(error) ? '로그인 필요' : '연결 오류', 'error');
     $('connectionMessage').textContent = errorText(error);
@@ -101,9 +116,9 @@
     $('savePos').disabled = disabled;
     $('addNotice').disabled = disabled || noticeState !== 'ready';
     $('saveNotice').disabled = disabled;
-    $('logout').hidden = !user;
+    $('logout').hidden = !user && !guest;
     $('logout').disabled = loading || saving;
-    $('googleSignIn').hidden = Boolean(user);
+    $('googleSignIn').hidden = Boolean(user || guest);
     document.querySelectorAll('#taskForm input, #taskForm select, #taskForm textarea, #eventForm input, #posForm input, #posForm textarea, #noticeForm input, #noticeForm textarea, #noticeForm select').forEach(input => { input.disabled = saving; });
     for (const id of ['closeDialog', 'cancelDialog', 'closeEventDialog', 'cancelEventDialog', 'reloadTask', 'reloadEvent', 'taskResumeSession', 'eventResumeSession']) $(id).disabled = saving || loading;
   }
@@ -166,7 +181,7 @@
     render();
   }
   function expireSession() {
-    if (!credential || Date.now() < expiresAt) return false;
+    if ((!credential && !guest) || Date.now() < expiresAt) return false;
     showConnectionError(requestError(401, 'Google 로그인 시간이 만료되었습니다.'));
     return true;
   }
@@ -193,20 +208,25 @@
   }
   async function onGoogleCredential(response) {
     const token = response.credential;
-    if (loading || saving || user || typeof token !== 'string' || token.length > 10000) return;
+    if (loading || saving || user || guest || typeof token !== 'string' || token.length > 10000) return;
     loading = true;
     updateControls();
     setStatus('로그인 확인 중');
     try {
       // The API verifies the credential before this UI accepts any account details.
       const session = await api('session', {}, token);
-      if (!session.user || typeof session.user.id !== 'string' || !session.user.id) {
-        throw requestError(0, 'Google 계정 응답을 확인하지 못했습니다.');
-      }
-      const board = await readBoard(token);
       // Use the JWT expiry only to clear the local UI; the server enforces it separately.
       const exp = credentialExpiry(token);
       if (exp <= Date.now() || exp > Date.now() + 24 * 60 * 60 * 1000) throw requestError(401, 'Google 로그인 시간이 만료되었습니다.');
+      if (session.access === 'guest') {
+        enterGuest(exp);
+        return;
+      }
+      if ((session.access !== undefined && session.access !== 'member') || !session.user || typeof session.user.id !== 'string' || !session.user.id) {
+        throw requestError(0, 'Google 계정 응답을 확인하지 못했습니다.');
+      }
+      const board = await readBoard(token);
+      if (exp <= Date.now()) throw requestError(401, 'Google 로그인 시간이 만료되었습니다.');
       const editor = $('taskDialog').open ? taskEdit?.principal : eventEdit?.principal;
       if (isDialogOpen() && editor && editor !== session.user.id) {
         discardDraft();
@@ -324,7 +344,7 @@
       const statusCell = node('td'); statusCell.append(node('span', `pill ${badgeClass(task.status)}`, task.status));
       tr.append(main, node('td', 'owner-cell', task.owner), due, statusCell); $('taskRows').append(tr);
     });
-    $('emptyTasks').textContent = !loaded ? 'Google 로그인 후 업무가 표시됩니다.' : tasks.some(t => t.status !== '완료') || status === '완료' ? '조건에 맞는 업무가 없습니다.' : tasks.length ? '진행 중인 업무가 없습니다. 끝난 업무는 상태에서 ‘완료’를 고르면 보입니다.' : '등록된 업무가 없습니다. ‘업무 등록’으로 첫 업무를 추가하세요.';
+    $('emptyTasks').textContent = !loaded ? privateViewMessage('업무 목록') : tasks.some(t => t.status !== '완료') || status === '완료' ? '조건에 맞는 업무가 없습니다.' : tasks.length ? '진행 중인 업무가 없습니다. 끝난 업무는 상태에서 ‘완료’를 고르면 보입니다.' : '등록된 업무가 없습니다. ‘업무 등록’으로 첫 업무를 추가하세요.';
     $('emptyTasks').hidden = visible.length !== 0;
     $('allTasks').classList.toggle('selected', !mine); $('myTasks').classList.toggle('selected', mine);
     $('allTasks').setAttribute('aria-pressed', String(!mine)); $('myTasks').setAttribute('aria-pressed', String(mine));
@@ -341,10 +361,13 @@
     renderPos(dates[0]);
     renderNotices();
   }
+  function privateViewMessage(label) {
+    return guest ? `${label}: 허용된 팀 계정에만 표시됩니다.` : `${label}: 허용된 Google 계정으로 로그인해 주세요.`;
+  }
   function renderNotices() {
     const list = $('noticeList');
     list.replaceChildren();
-    if (!loaded) { list.append(node('p', '', 'Google 로그인 후 공지가 표시됩니다.')); return; }
+    if (!loaded) { list.append(node('p', '', privateViewMessage('공지'))); return; }
     if (noticeState === 'not-deployed') { list.append(node('p', 'pos-warn', '시트 웹앱이 아직 공지를 받지 못합니다. Apps Script 코드를 갱신하면 쓸 수 있습니다.')); return; }
     if (noticeState === 'error') { list.append(node('p', 'pos-warn', '공지를 불러오지 못했습니다. 새로고침해 주세요.')); return; }
     const shown = notices.filter(item => item.status === '게시').slice(0, 5);
@@ -399,7 +422,7 @@
   function renderPos(weekStart) {
     const body = $('posBody');
     body.replaceChildren();
-    if (!loaded) { body.append(node('p', '', 'Google 로그인 후 예약 요약이 표시됩니다.')); return; }
+    if (!loaded) { body.append(node('p', '', privateViewMessage('예약 요약'))); return; }
     if (posState === 'not-deployed') { body.append(node('p', 'pos-warn', '시트 웹앱이 아직 예약 요약을 받지 못합니다. Apps Script 코드를 갱신하면 표시됩니다.')); return; }
     if (posState === 'error') { body.append(node('p', 'pos-warn', '예약 요약을 불러오지 못했습니다. 새로고침해 주세요.')); return; }
     const current = posSummaries.find(item => item.weekStart === weekStart);
@@ -458,7 +481,8 @@
       const item = node('button', 'event event-button'); item.type = 'button'; item.addEventListener('click', () => openEvent(event.id));
       const detail = node('span'); detail.append(node('b', '', event.title), node('small', '', event.owner)); item.append(node('time', '', event.time), detail); $('todayEvents').append(item);
     });
-    if (!daily.length) $('todayEvents').append(node('p', 'empty-events', loaded ? '오늘 등록된 일정이 없습니다.' : 'Google 로그인 후 일정이 표시됩니다.'));
+    const privateSchedule = privateViewMessage('센터 일정');
+    if (!daily.length) $('todayEvents').append(node('p', 'empty-events', loaded ? '오늘 등록된 일정이 없습니다.' : privateSchedule));
     $('calendarDays').replaceChildren();
     dates.forEach((date, index) => {
       const label = ['월', '화', '수', '목', '금', '토', '일'][index], cell = node('div', `calendar-day${date === today ? ' today' : ''}`);
@@ -476,7 +500,7 @@
       item.append(node('time', '', `${event.date.replaceAll('-', '. ')} · ${event.time}`), node('b', '', event.title), node('small', '', event.owner));
       item.addEventListener('click', () => openEvent(event.id)); $('allEvents').append(item);
     });
-    if (!sorted.length) $('allEvents').append(node('p', 'empty-events', loaded ? '등록된 일정이 없습니다. ‘일정 등록’으로 추가하세요.' : 'Google 로그인 후 일정이 표시됩니다.'));
+    if (!sorted.length) $('allEvents').append(node('p', 'empty-events', loaded ? '등록된 일정이 없습니다. ‘일정 등록’으로 추가하세요.' : privateSchedule));
   }
   function openTask(id) {
     if (!user || !loaded || loading || saving) return;

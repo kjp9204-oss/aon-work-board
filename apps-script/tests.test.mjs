@@ -132,7 +132,7 @@ test("bound setup initializes exact headers and preserves named records on anoth
 
 test("verifies a real RS256 signature and returns stable Google sub", () => {
   const { call, options } = fixture();
-  assert.deepEqual(call("session"), { ok: true, storage: "sheet", user: { id: actorId, displayName: "검증용 계정" } });
+  assert.deepEqual(call("session"), { ok: true, storage: "sheet", access: "member", user: { id: actorId, displayName: "검증용 계정" } });
   assert.equal(call("session").ok, true);
   assert.equal(options.fetches, 1);
 });
@@ -161,18 +161,41 @@ test("rejects expired, wrong-audience, wrong-key, tampered, wrong-algorithm and 
   assert.equal(options.opens, 0);
 });
 
-test("allowlist denies every action except signed allowed identities and applies removals immediately", () => {
-  const { call, tabs, context } = fixture();
-  for (const action of ["session", "listTasks", "listEvents", "createTask", "updateTask", "createEvent", "updateEvent"]) {
-    const response = call(action, {}, token({ email: "not-allowlisted@gmail.com" }));
+test("verified guests sign in without identity or data; private actions require the current allowlist", () => {
+  const { call, tabs, context, options } = fixture();
+  const guest = { ok: true, storage: "sheet", access: "guest" };
+  const unknown = token({ email: "not-allowlisted@gmail.com" });
+  const thirdParty = token({ email: "operator@example.org" });
+  const protectedActions = [
+    "listTasks", "listEvents", "createTask", "updateTask", "createEvent", "updateEvent",
+    "listNotices", "createNotice", "updateNotice", "listPos", "createPos", "updatePos"
+  ];
+  tabs.delete("공지");
+  tabs.delete("예약 요약");
+  assert.equal(call("session", {}, "").status, 401);
+  assert.deepEqual(call("session", {}, unknown), guest);
+  for (const action of protectedActions) {
+    const response = call(action, {}, unknown);
     assert.equal(response.status, 403);
     assert.equal(response.error.code, "ACCOUNT_NOT_ALLOWED");
+    assert.equal(response.tasks, undefined);
+    assert.equal(response.events, undefined);
+    assert.equal(response.notices, undefined);
+    assert.equal(response.posSummaries, undefined);
   }
-  assert.equal(call("session", {}, token({ email: "someone@example.org" })).error.code, "GOOGLE_EMAIL_REQUIRED");
+  assert.equal(options.batch, null);
+  assert.equal(tabs.has("공지"), false);
+  assert.equal(tabs.has("예약 요약"), false);
+  const priorOpens = options.opens;
   tabs.get("허용 계정").rows.push(["operator@example.org"]);
-  assert.equal(call("session", {}, token({ email: "operator@example.org", hd: "example.org" })).ok, true);
+  assert.deepEqual(call("session", {}, thirdParty), guest);
+  for (const action of protectedActions) assert.equal(call(action, {}, thirdParty).error.code, "GOOGLE_EMAIL_REQUIRED");
+  assert.equal(options.opens, priorOpens);
+  assert.equal(call("session", {}, token({ email: "operator@example.org", hd: "example.org" })).access, "member");
+  assert.equal(call("session").access, "member");
   tabs.get("허용 계정").rows.splice(1);
-  assert.equal(call("session").status, 403);
+  assert.deepEqual(call("session"), guest);
+  assert.equal(call("listTasks").error.code, "ACCOUNT_NOT_ALLOWED");
   assert.equal(context.doGet().status, 405);
 });
 

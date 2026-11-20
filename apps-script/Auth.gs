@@ -32,12 +32,11 @@ function readGoogleIdToken_(token, clientId, now, findKey) {
   const key = findKey(header.kid);
   if (!key || !verifyGoogleRsa_(key, signature, parts[0] + "." + parts[1])) return null;
   const email = claims.email.toLowerCase();
-  // A previously verified third-party email alone is not proof the holder still owns it.
-  if (!email.endsWith("@gmail.com") && !(typeof claims.hd === "string" && claims.hd.length > 0)) {
-    throw new BoardError_(403, "GOOGLE_EMAIL_REQUIRED", "Gmail 또는 관리되는 Google Workspace 계정으로 로그인해 주세요.");
-  }
+  // A signed Google account may enter as a guest. Trust an email for the board's
+  // allowlist only when Google is authoritative for that address.
+  const emailAuthoritative = email.endsWith("@gmail.com") || (typeof claims.hd === "string" && claims.hd.length > 0);
   const normalName = typeof claims.name === "string" ? claims.name.trim().replace(/[\u0000-\u001f\u007f]/g, "") : "";
-  return { id: claims.sub, displayName: normalName.slice(0, 100) || "Google 계정", email: email };
+  return { id: claims.sub, displayName: normalName.slice(0, 100) || "Google 계정", email: email, emailAuthoritative: emailAuthoritative };
 }
 
 function isBase64Url_(value) {
