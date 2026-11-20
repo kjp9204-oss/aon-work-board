@@ -115,6 +115,7 @@
     $('addPos').disabled = disabled || posState !== 'ready';
     $('savePos').disabled = disabled;
     $('addNotice').disabled = disabled || noticeState !== 'ready';
+    $('addNoticePage').disabled = disabled || noticeState !== 'ready';
     $('saveNotice').disabled = disabled;
     $('logout').hidden = !user && !guest;
     $('logout').disabled = loading || saving;
@@ -351,12 +352,12 @@
     $('filterDescription').textContent = ({ today: '오늘 마감 · 미완료', overdue: '마감 지난 업무', waiting: '확인 대기' })[quickFilter] || (mine ? '내가 등록한 업무' : '전체 업무');
     const doneCount = tasks.filter(t => t.status === '완료').length;
     if (loaded && doneCount && status !== '완료') $('filterDescription').textContent += ` · 완료 ${doneCount}건 숨김`;
-    $('overviewLayout').hidden = page === 'calendar' || page === 'ai'; $('calendarView').hidden = page !== 'calendar'; $('ai-dashboard').hidden = page !== 'ai';
+    $('overviewLayout').hidden = ['calendar', 'ai', 'notice'].includes(page); $('noticePage').hidden = page !== 'notice'; $('calendarView').hidden = page !== 'calendar'; $('ai-dashboard').hidden = page !== 'ai';
     $('overviewLayout').classList.toggle('tasks-only', page === 'tasks');
     document.querySelectorAll('[data-page]').forEach(button => { const selected = button.dataset.page === page; button.classList.toggle('active', selected); if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
-    const title = ({ overview: '오늘의 센터', tasks: '업무', calendar: '센터 일정', ai: 'AI 대시보드' })[page];
+    const title = ({ overview: '오늘의 센터', tasks: '업무', calendar: '센터 일정', ai: 'AI 대시보드', notice: '공지사항' })[page];
     $('pageTitle').textContent = title; $('breadcrumbCurrent').textContent = title;
-    $('pageDescription').textContent = ({ overview: '오늘 할 일과 센터 일정, 다음 행동을 확인하세요.', tasks: '담당자와 마감, 다음 행동을 한곳에서 확인하세요.', calendar: '회의와 교육 일정을 미리 확인하고 준비하세요.', ai: 'Claude·ChatGPT·Codex 사이의 작업 흐름입니다.' })[page];
+    $('pageDescription').textContent = ({ overview: '오늘 할 일과 센터 일정, 다음 행동을 확인하세요.', tasks: '담당자와 마감, 다음 행동을 한곳에서 확인하세요.', calendar: '회의와 교육 일정을 미리 확인하고 준비하세요.', ai: 'Claude·ChatGPT·Codex 사이의 작업 흐름입니다.', notice: '센터 팀원에게 알릴 내용을 쓰고 고칩니다.' })[page];
     renderEvents(today, dates);
     renderPos(dates[0]);
     renderNotices();
@@ -365,16 +366,18 @@
     return guest ? `${label}: 허용된 팀 계정에만 표시됩니다.` : `${label}: 허용된 Google 계정으로 로그인해 주세요.`;
   }
   function renderNotices() {
-    const list = $('noticeList');
+    renderNoticeList($('noticeList'), notices.filter(item => item.status === '게시').slice(0, 5));
+    renderNoticeList($('noticePageList'), notices);
+  }
+  function renderNoticeList(list, items) {
     list.replaceChildren();
     if (!loaded) { list.append(node('p', '', privateViewMessage('공지'))); return; }
-    if (noticeState === 'not-deployed') { list.append(node('p', 'pos-warn', '시트 웹앱이 아직 공지를 받지 못합니다. Apps Script 코드를 갱신하면 쓸 수 있습니다.')); return; }
+    if (noticeState === 'not-deployed') { list.append(node('p', 'pos-warn', '공지 저장이 아직 켜지지 않았습니다. 시트 웹앱(Apps Script)을 새 버전으로 배포하면 바로 쓸 수 있습니다.')); return; }
     if (noticeState === 'error') { list.append(node('p', 'pos-warn', '공지를 불러오지 못했습니다. 새로고침해 주세요.')); return; }
-    const shown = notices.filter(item => item.status === '게시').slice(0, 5);
-    if (!shown.length) { list.append(node('p', '', '게시된 공지가 없습니다. ‘공지 작성’으로 추가하세요.')); return; }
-    for (const item of shown) {
-      const button = node('button', 'notice-item'); button.type = 'button';
-      button.append(node('b', '', item.title));
+    if (!items.length) { list.append(node('p', '', '게시된 공지가 없습니다. ‘공지 작성’으로 추가하세요.')); return; }
+    for (const item of items) {
+      const button = node('button', `notice-item${item.status === '내림' ? ' down' : ''}`); button.type = 'button';
+      button.append(node('b', '', item.status === '내림' ? `[내림] ${item.title}` : item.title));
       if (item.body) button.append(node('span', '', item.body));
       button.append(node('small', '', `${item.date.replaceAll('-', '. ')} · ${item.owner}`));
       button.addEventListener('click', () => openNotice(item.id));
@@ -579,6 +582,7 @@
   $('addTask').addEventListener('click', () => openTask()); $('addEvent').addEventListener('click', () => openEvent());
   $('addPos').addEventListener('click', openPos);
   $('addNotice').addEventListener('click', () => openNotice());
+  $('addNoticePage').addEventListener('click', () => openNotice());
   for (const id of ['closeNoticeDialog', 'cancelNoticeDialog']) $(id).addEventListener('click', () => { if (!saving) $('noticeDialog').close(); });
   $('noticeDialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
   $('noticeForm').addEventListener('submit', event => { event.preventDefault(); persistNotice(); });
