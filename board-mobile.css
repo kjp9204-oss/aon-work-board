@@ -53,7 +53,7 @@ html { -webkit-text-size-adjust: 100%; }
 .board-home .chalkboard { background: #2e4034; border: 10px solid #a27a52; border-radius: 14px; box-shadow: inset 0 0 40px #0000004d, 0 8px 22px #3a2a1a26; color: #f2efe4; min-height: 260px; display: flex; flex-direction: column; position: relative; }
 .board-home .chalkboard::after { content: ""; position: absolute; left: 12%; right: 12%; bottom: -10px; height: 6px; background: #8a6440; border-radius: 3px 3px 0 0; }
 .board-home .chalkboard .panel-title h2 { color: #fffdf3; font-size: 22px; letter-spacing: -.02em; }
-.board-home .chalkboard .panel-title p { color: #c9d3c6; font-size: 14px; }
+.board-home .chalkboard .panel-title p { color: #c9d3c6; font-size: 15px; }
 .board-home .chalkboard .text-button { color: #fffdf3; border: 1px dashed #e8e3d0aa; border-radius: 8px; padding: 8px 12px; background: transparent; font-size: 15px; }
 .board-home .chalkboard .text-button:disabled { opacity: .55; }
 .board-home .chalkboard .notice-list { padding: 4px 22px 22px; flex: 1; }
@@ -104,3 +104,12 @@ html { -webkit-text-size-adjust: 100%; }
   .board-home .notice-when small { margin-top: 0; }
   .board-home .chalk-more { margin: 0 16px 14px; }
 }
+
+/* Readable floor on every screen size: content 16px, labels and buttons 15px, small tags 13px. */
+.board-home .task-next, .board-home .owner-cell, .board-home .date-cell, .board-home .panel-title p,
+.board-home .demo-strip span, .board-home .schedule-foot, .board-home .table-footer span, .board-home .event small,
+.board-home .metric p, .board-home .notice-item span, .board-home .pos-line, .board-home .filter-description { font-size: 16px; }
+.board-home .text-button, .board-home .secondary-button, .board-home .refresh-button, .board-home .account-link,
+.board-home .preview-badge, .board-home .change-summary, .board-home th, .board-home .category-label,
+.board-home .eyebrow, .board-home .sidebar small, .board-home .pos-meta, .board-home .page-footer { font-size: 15px; }
+.board-home .pill, .board-home .new-badge { font-size: 13px; }
