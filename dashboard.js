@@ -123,6 +123,7 @@
     $('refreshData').disabled = disabled;
     $('saveTask').disabled = disabled;
     $('saveEvent').disabled = disabled;
+    $('addPos').hidden = !user || !loaded;
     $('addPos').disabled = disabled || posState !== 'ready';
     $('savePos').disabled = disabled;
     $('addNotice').disabled = disabled || noticeState !== 'ready';
@@ -473,24 +474,66 @@
     const part = type => parts.find(p => p.type === type).value;
     return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`;
   }
+  function posDayList(weekStart, byDay) {
+    const start = new Date(`${weekStart}T00:00:00Z`);
+    if (start.getUTCDay() !== 1) return null;
+    const counts = new Map();
+    for (const entry of byDay.split(/[·\n]+/)) {
+      const match = /^([월화수목금토일])(?:요일)?\s*[:：]?\s*(\d+)\s*건?$/.exec(entry.trim());
+      if (!match || counts.has(match[1])) return null;
+      counts.set(match[1], match[2]);
+    }
+    if (counts.size !== 7) return null;
+    const list = node('ul', 'pos-days');
+    for (const [index, day] of [...'월화수목금토일'].entries()) {
+      const date = offsetDate(weekStart, index);
+      const label = node('time', '', `${dateText(date)} (${day})`);
+      label.dateTime = date;
+      const item = node('li');
+      item.append(label, node('b', '', `${counts.get(day)}건`));
+      list.append(item);
+    }
+    return list;
+  }
   function renderPos(weekStart) {
-    const body = $('posBody');
-    body.replaceChildren();
-    if (!loaded) { body.append(node('p', '', privateViewMessage('예약 요약'))); return; }
-    if (posState === 'not-deployed') { body.append(node('p', 'pos-warn', '시트 웹앱이 아직 예약 요약을 받지 못합니다. Apps Script 코드를 갱신하면 표시됩니다.')); return; }
-    if (posState === 'error') { body.append(node('p', 'pos-warn', '예약 요약을 불러오지 못했습니다. 새로고침해 주세요.')); return; }
+    const brief = $('posBody'), detail = $('posDetailBody');
+    const bodies = [brief, detail];
+    bodies.forEach(body => body.replaceChildren());
+    $('openPosCalendar').hidden = !user || !loaded;
+    function message(text, style = '') {
+      bodies.forEach(body => body.append(node('p', style, text)));
+    }
+    if (!user || !loaded) { message(privateViewMessage('예약 요약')); return; }
+    if (posState === 'not-deployed') { message('시트 웹앱이 아직 예약 요약을 받지 못합니다. Apps Script 코드를 갱신하면 표시됩니다.', 'pos-warn'); return; }
+    if (posState === 'error') { message('예약 요약을 불러오지 못했습니다. 새로고침해 주세요.', 'pos-warn'); return; }
     const current = posSummaries.find(item => item.weekStart === weekStart);
     const latest = current || posSummaries[0];
-    if (!latest) { body.append(node('p', '', '아직 가져온 요약이 없습니다. 토스 POS를 확인한 뒤 ‘요약 입력’으로 기록합니다.')); return; }
-    if (!current) body.append(node('p', 'pos-warn', '이번 주 요약은 아직 없습니다. 최근 기록을 보여 드립니다.'));
-    const total = node('p', 'pos-total', `예약 ${latest.total}건`); total.append(node('small', '', latest.period)); if (isNew(latest)) total.prepend(newBadge());
-    body.append(total);
-    for (const [label, value] of [['요일', latest.byDay], ['시간대', latest.byTime], ['메모', latest.note]]) {
-      if (!value) continue;
-      const line = node('p', 'pos-line'); line.append(node('b', '', label), document.createTextNode(value)); body.append(line);
+    $('addPos').textContent = current ? '이번 주 요약 수정' : '이번 주 요약 입력';
+    if (!latest) { message('아직 저장된 예약 요약이 없습니다.'); return; }
+    if (!current) message('이번 주 요약은 아직 없습니다. 최근 기록을 보여 드립니다.', 'pos-warn');
+    for (const body of bodies) {
+      const total = node('p', 'pos-total', `예약 ${latest.total}건`);
+      total.append(node('small', '', latest.period));
+      if (isNew(latest)) total.prepend(newBadge());
+      body.append(total);
     }
+    const checked = `토스 POS 확인 ${latest.checkedAt}`;
+    brief.append(node('p', 'pos-meta', checked));
+    const days = latest.byDay ? posDayList(latest.weekStart, latest.byDay) : null;
+    if (days) {
+      const label = node('p', 'pos-line');
+      label.append(node('b', '', '날짜별 건수'));
+      detail.append(label, days);
+    }
+    for (const [label, value] of [['날짜별 건수', days ? '' : latest.byDay], ['시간대별 건수', latest.byTime], ['메모', latest.note]]) {
+      if (!value) continue;
+      const line = node('p', 'pos-line');
+      line.append(node('b', '', label), node('span', 'pos-detail-value', value));
+      detail.append(line);
+    }
+    if (!latest.byDay) detail.append(node('p', 'pos-meta', '저장된 날짜별 건수가 없습니다.'));
     const saved = Date.parse(latest.updatedAt);
-    body.append(node('p', 'pos-meta', `토스 POS 확인 ${latest.checkedAt}${Number.isFinite(saved) ? ` · 시트 저장 ${kstStamp(new Date(saved)).slice(5)}` : ''}`));
+    detail.append(node('p', 'pos-meta', `${checked}${Number.isFinite(saved) ? ` · 시트 저장 ${kstStamp(new Date(saved)).slice(5)}` : ''}`));
   }
   function openPos() {
     if (!user || !loaded || loading || saving || posState !== 'ready') return;
@@ -661,6 +704,15 @@
   $('shareNotice').addEventListener('click', () => { if (noticeEdit && !noticeEdit.isNew) shareLink('#notice/' + noticeEdit.id); else toast('저장한 뒤 링크를 복사할 수 있습니다.'); });
   document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { if (button.dataset.filter === 'week') { page = 'calendar'; render(); return; } resetFilters(); quickFilter = button.dataset.filter; page = 'tasks'; render(); }));
   $('openCalendar').addEventListener('click', () => { page = 'calendar'; setHash('#calendar'); render(); });
+  $('openPosCalendar').addEventListener('click', event => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    page = 'calendar';
+    setHash('#calendar');
+    render();
+    $('calendarPos').focus({ preventScroll: true });
+    $('calendarPos').scrollIntoView({ block: 'start' });
+  });
   $('allTasks').addEventListener('click', () => { mine = false; render(); });
   $('myTasks').addEventListener('click', () => { mine = true; $('ownerFilter').value = ''; render(); });
   ['searchTasks', 'ownerFilter', 'statusFilter'].forEach(id => $(id).addEventListener(id === 'searchTasks' ? 'input' : 'change', render));

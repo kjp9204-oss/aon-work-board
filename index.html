@@ -2,10 +2,10 @@
 <html lang="ko">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AON 운동센터 · 업무 대문</title><meta name="description" content="에이온운동센터 팀원 공지판과 오늘의 업무·일정·예약 요약. 허용된 팀 Google 계정으로 로그인해 확인합니다."><meta property="og:type" content="website"><meta property="og:site_name" content="AON 운동센터"><meta property="og:title" content="AON 오늘의 센터 · 공지판"><meta property="og:description" content="팀 공지, 오늘 할 일, 이번 주 예약 요약을 한곳에서 확인합니다. 팀 계정 로그인 필요."><meta property="og:image" content="https://kjp9204-oss.github.io/aon-work-board/assets/share-card.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:url" content="https://kjp9204-oss.github.io/aon-work-board/"><meta name="twitter:card" content="summary_large_image"><link rel="icon" href="favicon.svg">
 <link rel="stylesheet" href="dashboard.css?v=20261120c">
-<link rel="stylesheet" href="board-theme.css?v=20261120c">
+<link rel="stylesheet" href="board-theme.css?v=20261120d">
 <link rel="stylesheet" href="board-mobile.css?v=20261120c">
 <script src="board-config.js?v=20261120c" defer></script>
-<script src="dashboard.js?v=20261120c" defer></script>
+<script src="dashboard.js?v=20261120d" defer></script>
 <script src="board-links.js?v=20261120c" defer></script></head>
 <body class="board-home">
 <div class="app-shell">
@@ -44,8 +44,9 @@
       <div id="noticeList" class="notice-list"><p>Google 로그인 후 공지가 표시됩니다.</p></div><button type="button" class="chalk-more" id="openNoticePage">공지 전체 보기 →</button>
      </section>
      <section class="panel center-extra" id="posSummary">
-      <div class="panel-title"><div><h2>토스 POS 예약 요약</h2><p>이번 주 예약 건수 · 고객 정보 없음</p></div><button type="button" class="text-button" id="addPos" disabled>요약 입력</button></div>
+      <div class="panel-title"><div><h2>토스 POS 예약 요약</h2><p>주간 예약 건수와 확인 시각</p></div></div>
       <div id="posBody" class="pos-body"><p>Google 로그인 후 예약 요약이 표시됩니다.</p></div>
+      <a class="text-button pos-calendar-link" id="openPosCalendar" href="#calendar" hidden>센터 일정에서 상세 보기</a>
      </section>
    </div>
    <section class="metrics" aria-label="업무 요약">
@@ -66,7 +67,15 @@
     </aside>
    </div>
    <section id="noticePage" class="panel calendar-panel" hidden><div class="panel-title"><div><h2>공지사항</h2><p>최근 7일 공지는 빛나게 표시됩니다 · 내린 공지는 맨 아래 회색</p></div><button type="button" class="secondary-button" id="addNoticePage" disabled>＋ 공지 작성</button></div><div id="noticePageList" class="notice-list notice-page-list"></div></section>
-   <section id="calendarView" class="panel calendar-panel" hidden><div class="panel-title"><div><h2>이번 주 센터 일정</h2><p id="calendarRange"></p></div><button type="button" class="secondary-button" id="addEvent" disabled>＋ 일정 등록</button></div><div class="calendar-grid" id="calendarDays"></div><div class="all-events-section"><h3>전체 일정</h3><p>다른 주의 일정도 여기서 확인하고 수정할 수 있습니다.</p><div id="allEvents" class="all-events"></div></div><div class="calendar-note">일정을 선택하면 담당자와 시간을 수정할 수 있습니다. 모든 날짜와 시간은 한국 시간 기준입니다.</div></section>
+   <section id="calendarView" class="panel calendar-panel" hidden>
+    <div class="panel-title"><div><h2>이번 주 센터 일정</h2><p id="calendarRange"></p></div><button type="button" class="secondary-button" id="addEvent" disabled>＋ 일정 등록</button></div>
+    <div class="calendar-grid" id="calendarDays"></div>
+    <section class="calendar-pos-section" id="calendarPos" aria-labelledby="calendarPosTitle" tabindex="-1">
+     <div class="panel-title"><div><h2 id="calendarPosTitle">토스 POS 주간 예약 상세</h2><p>날짜별 예약 건수 · 고객 정보 없음</p></div><button type="button" class="secondary-button" id="addPos" disabled hidden>이번 주 요약 입력</button></div>
+     <div id="posDetailBody" class="pos-body"><p>Google 로그인 후 예약 상세가 표시됩니다.</p></div>
+    </section>
+    <div class="all-events-section"><h3>전체 일정</h3><p>다른 주의 일정도 여기서 확인하고 수정할 수 있습니다.</p><div id="allEvents" class="all-events"></div></div><div class="calendar-note">일정을 선택하면 담당자와 시간을 수정할 수 있습니다. 모든 날짜와 시간은 한국 시간 기준입니다.</div>
+   </section>
    <section class="panel ai-panel" id="ai-dashboard" tabindex="-1" aria-labelledby="ai-heading" hidden>
     <div class="panel-title">
      <div><h2 id="ai-heading">AI 대시보드</h2><p>Claude와 Codex 사이의 작업 흐름</p></div>

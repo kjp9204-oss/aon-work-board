@@ -49,6 +49,13 @@
 .board-home #googleSignIn { max-width: 100%; }
 .board-home #logout { background: transparent; border: 0; color: var(--green); }
 .board-home .center-extra > p { margin: 0; padding: 0 18px 16px; color: var(--muted); }
+.board-home .pos-calendar-link { display: inline-block; margin: 0 18px 16px; }
+.board-home .calendar-pos-section { border-top: 1px solid var(--line); scroll-margin-top: 14px; }
+.board-home .pos-detail-value { white-space: pre-line; overflow-wrap: anywhere; }
+.board-home .pos-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 110px), 1fr)); gap: 6px; margin: 6px 0 10px; padding: 0; list-style: none; }
+.board-home .pos-days li { display: flex; flex-direction: column; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.board-home .pos-days time { font-size: 15px; color: var(--muted); }
+.board-home .pos-days b { font-size: 16px; color: var(--ink); }
 .board-home #announcements, .board-home #ai-dashboard { scroll-margin-top: 14px; }
 .board-home .ai-panel { margin-top: 18px; }
 .board-home .ai-panel-body { padding: 0 20px 20px; }
