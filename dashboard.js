@@ -334,6 +334,11 @@
     renderEvents(today, dates);
     renderPos(dates[0]);
   }
+  function kstStamp(date) {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
+    const part = type => parts.find(p => p.type === type).value;
+    return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`;
+  }
   function renderPos(weekStart) {
     const body = $('posBody');
     body.replaceChildren();
@@ -351,7 +356,7 @@
       const line = node('p', 'pos-line'); line.append(node('b', '', label), document.createTextNode(value)); body.append(line);
     }
     const saved = Date.parse(latest.updatedAt);
-    body.append(node('p', 'pos-meta', `토스 POS 확인 ${latest.checkedAt}${Number.isFinite(saved) ? ` · 시트 저장 ${new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(saved))}` : ''}`));
+    body.append(node('p', 'pos-meta', `토스 POS 확인 ${latest.checkedAt}${Number.isFinite(saved) ? ` · 시트 저장 ${kstStamp(new Date(saved)).slice(5)}` : ''}`));
   }
   function openPos() {
     if (!user || !loaded || loading || saving || posState !== 'ready') return;
@@ -363,8 +368,7 @@
     $('posPeriod').value = found?.period || `${dateText(weekStart)} ~ ${dateText(end)}`;
     $('posTotal').value = found?.total ?? '';
     $('posByDay').value = found?.byDay || ''; $('posByTime').value = found?.byTime || ''; $('posNote').value = found?.note || '';
-    const now = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date());
-    $('posCheckedAt').value = now;
+    $('posCheckedAt').value = kstStamp(new Date());
     $('posFormError').textContent = '';
     if (!$('posDialog').open) $('posDialog').showModal(); $('posTotal').focus();
   }
